@@ -1,0 +1,107 @@
+﻿@using OneMonthFlow.Domain.Shared
+@inject TeamService TeamService
+@inject TechStackService TechStackService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Add New Team</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm Model="@Request" @ref="form">
+            <MudTextField @bind-Value="Request.TeamCode" Label="Team Code" Required="true" For="@(() => Request.TeamCode)" />
+            <MudTextField @bind-Value="Request.TeamName" Label="Team Name" Required="true" For="@(() => Request.TeamName)" />
+
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Assign Tech Stacks</MudText>
+            @if (AllTechStacks.Any())
+            {
+                <MudGrid Spacing="2">
+                    @foreach (var techStack in AllTechStacks)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCheckBox T="bool" Label="@techStack.TechStackName"
+                                         Checked="@IsTechStackSelected(techStack.TechStackCode)"
+                                         CheckedChanged="@((bool val) => OnTechStackSelectionChanged(val, techStack.TechStackCode))" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+            else
+            {
+                <MudText>No tech stacks available to assign.</MudText>
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Color="Color.Secondary" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="SubmitAsync" Color="Color.Primary" Variant="Variant.Filled">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public TeamRequestModel Request { get; set; } = new(); // Request.TechStackCodes will be used
+
+    private MudForm? form;
+    private List<TechStackModel> AllTechStacks { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await TechStackService.GetAllTechStacksAsync(); // Using TeamService for this example
+        if (result.IsSuccess && result.Data != null)
+        {
+            AllTechStacks = result.Data;
+        }
+        else
+        {
+            Snackbar.Add($"Error loading tech stacks: {result.Message}", Severity.Warning);
+        }
+    }
+
+    private bool IsTechStackSelected(string techStackCode)
+    {
+        return Request.TechStackCodes.Contains(techStackCode);
+    }
+
+    private void OnTechStackSelectionChanged(bool isSelected, string techStackCode)
+    {
+        if (isSelected)
+        {
+            if (!Request.TechStackCodes.Contains(techStackCode))
+            {
+                Request.TechStackCodes.Add(techStackCode);
+            }
+        }
+        else
+        {
+            Request.TechStackCodes.Remove(techStackCode);
+        }
+        // StateHasChanged(); // May not be needed if MudCheckBox updates UI correctly
+    }
+
+    private async Task SubmitAsync()
+    {
+        await form!.Validate();
+
+        if (form.IsValid)
+        {
+            var result = await TeamService.CreateTeamAsync(Request);
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Team created successfully", Severity.Success);
+                MudDialog?.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                // HandleError helper from parent page or split message here
+                var messages = result.Message?.Split(';') ?? new[] { "An unknown error occurred." };
+                foreach (var error in messages.Where(m => !string.IsNullOrWhiteSpace(m)))
+                {
+                    Snackbar.Add(error, Severity.Error);
+                }
+            }
+        }
+    }
+
+    private void Cancel() => MudDialog?.Cancel();
+}

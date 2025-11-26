@@ -1,0 +1,108 @@
+﻿@page "/"
+@page "/dashboard"
+@inject DashboardService DashboardService
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+<MudGrid Spacing="4">
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 mud-elevation-2">
+            <MudText Typo="Typo.h6">Total Projects</MudText>
+            <MudText Typo="Typo.h5">@TotalProjects</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 mud-elevation-2">
+            <MudText Typo="Typo.h6">Active Projects</MudText>
+            <MudText Typo="Typo.h5">@ActiveProjects</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 mud-elevation-2">
+            <MudText Typo="Typo.h6">Total Members</MudText>
+            <MudText Typo="Typo.h5">@TotalUsers</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 mud-elevation-2">
+            <MudText Typo="Typo.h6">Total Teams</MudText>
+            <MudText Typo="Typo.h5">@TotalTeams</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h6" Class="mt-6 mb-2">Projects Ending Soon (within 10 days)</MudText>
+@if (EndingSoonProjects == null)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else if (!EndingSoonProjects.Any())
+{
+    <MudText>No projects ending soon.</MudText>
+}
+else
+{
+    <MudTable Items="EndingSoonProjects" Hover="true">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>End Date</MudTh>
+            <MudTh>Status</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.ProjectCode</MudTd>
+            <MudTd>@context.ProjectName</MudTd>
+            <MudTd>@context.EndDate?.ToShortDateString()</MudTd>
+            <MudTd>@context.Status</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+<MudText Typo="Typo.h6" Class="mt-6 mb-2">Latest Project Activities</MudText>
+@if (LatestActivities == null)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else if (!LatestActivities.Any())
+{
+    <MudText>No recent project activities.</MudText>
+}
+else
+{
+    <MudList T="ProjectTeamActivityModel">
+        @foreach (var activity in LatestActivities)
+        {
+            <MudListItem>
+                <MudText Typo="Typo.body2">
+                    Project: @activity.ProjectCode, Team: @activity.TeamCode - @activity.ActivityDate?.ToShortDateString()
+                </MudText>
+                <MudText Typo="Typo.body1">@activity.Tasks</MudText>
+            </MudListItem>
+            <MudDivider />
+        }
+    </MudList>
+}
+
+@code {
+    private int TotalProjects { get; set; }
+    private int ActiveProjects { get; set; }
+    private int TotalUsers { get; set; }
+    private int TotalTeams { get; set; }
+    private List<ProjectModel> EndingSoonProjects { get; set; }
+    private List<ProjectTeamActivityModel> LatestActivities { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        TotalProjects = await DashboardService.GetTotalProjectsAsync();
+        ActiveProjects = await DashboardService.GetActiveProjectsAsync();
+        TotalUsers = await DashboardService.GetTotalUsersAsync();
+        TotalTeams = await DashboardService.GetTotalTeamsAsync();
+        EndingSoonProjects = await DashboardService.GetProjectsEndingSoonAsync(10);
+        LatestActivities = await DashboardService.GetLatestActivitiesAsync(5);
+    }
+}

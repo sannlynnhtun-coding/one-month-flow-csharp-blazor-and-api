@@ -1,0 +1,163 @@
+﻿@using ClosedXML.Excel
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudFileUpload T="IBrowserFile" Accept=".xlsx,.xls" FilesChanged="UploadFiles">
+            <ActivatorContent>
+                <MudButton HtmlTag="label" Variant="Variant.Outlined" Color="Color.Primary">
+                    Upload Excel File
+                </MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+        @if (uploadProgress > 0)
+        {
+            <MudProgressLinear Value="@uploadProgress" Class="mt-4" />
+            <MudText Class="mt-2">Uploading...</MudText>
+        }
+        @if (validationErrors.Any())
+        {
+            <MudText Color="Color.Error" Class="mt-2">Validation Errors:</MudText>
+            <MudList T="List<string>">
+                @foreach (var error in validationErrors)
+                {
+                    <MudListItem Icon="@Icons.Material.Filled.ErrorOutline">@error</MudListItem>
+                }
+            </MudList>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Disabled="@(selectedFile == null || isProcessing)" OnClick="ProcessFile">Upload</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+
+    private IBrowserFile selectedFile;
+    private ElementReference InputFile;
+    private double uploadProgress;
+    private bool isProcessing = false;
+    private List<string> validationErrors = new();
+
+    private async Task UploadFiles(IBrowserFile e)
+    {
+        selectedFile = e;
+        uploadProgress = 0;
+        validationErrors.Clear();
+        StateHasChanged();
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task ProcessFile()
+    {
+        if (selectedFile == null)
+        {
+            Snackbar.Add("Please select an Excel file.", Severity.Warning);
+            return;
+        }
+
+        isProcessing = true;
+        StateHasChanged();
+
+        string tempFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.xlsx");
+
+        try
+        {
+            // Save file to temp
+            using (var fileStream = File.Create(tempFilePath))
+            {
+                using var stream = selectedFile.OpenReadStream(selectedFile.Size);
+                await stream.CopyToAsync(fileStream);
+            }
+
+            // Read users from temp file
+            using var tempFileStream = File.OpenRead(tempFilePath);
+            var users = ReadUsersFromExcel(tempFileStream);
+
+            // Process users
+            if (users != null && users.Any())
+            {
+                MudDialog.Close(users);
+            }
+            else if (!validationErrors.Any())
+            {
+                Snackbar.Add("No valid user data found in the Excel file.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error processing file: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            // Delete temp file
+            if (File.Exists(tempFilePath))
+            {
+                File.Delete(tempFilePath);
+            }
+
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private List<UserRequestModel> ReadUsersFromExcel(Stream stream)
+    {
+        stream.Position = 0; // Reset stream position before reading
+
+        using var workbook = new XLWorkbook(stream);
+        var worksheet = workbook.Worksheets.FirstOrDefault();
+
+        if (worksheet == null)
+        {
+            Snackbar.Add("No worksheet found in the Excel file.", Severity.Warning);
+            return null;
+        }
+
+        var users = new List<UserRequestModel>();
+        int firstRow = 2; // Assuming the first row is the header
+        int lastRow = worksheet.LastRowUsed()?.RowNumber() ?? firstRow;
+
+        for (int row = firstRow; row <= lastRow; row++)
+        {
+            var userName = worksheet.Cell(row, 1).GetString();
+            var gitHubAccountName = worksheet.Cell(row, 2).GetString();
+            var nrc = worksheet.Cell(row, 3).GetString();
+            var mobileNo = worksheet.Cell(row, 4).GetString();
+
+            // Skip empty rows
+            if (string.IsNullOrWhiteSpace(userName) &&
+                string.IsNullOrWhiteSpace(gitHubAccountName) &&
+                string.IsNullOrWhiteSpace(nrc) &&
+                string.IsNullOrWhiteSpace(mobileNo))
+            {
+                continue;
+            }
+
+            // Validation
+            if (string.IsNullOrWhiteSpace(userName)) validationErrors.Add($"Row {row}: User Name is required.");
+            if (string.IsNullOrWhiteSpace(gitHubAccountName)) validationErrors.Add($"Row {row}: GitHub Account is required.");
+            if (string.IsNullOrWhiteSpace(nrc)) validationErrors.Add($"Row {row}: NRC is required.");
+            if (string.IsNullOrWhiteSpace(mobileNo)) validationErrors.Add($"Row {row}: Mobile No is required.");
+
+            if (!string.IsNullOrWhiteSpace(userName) &&
+                !string.IsNullOrWhiteSpace(gitHubAccountName) &&
+                !string.IsNullOrWhiteSpace(nrc) &&
+                !string.IsNullOrWhiteSpace(mobileNo))
+            {
+                users.Add(new UserRequestModel
+                {
+                    UserName = userName,
+                    GitHubAccountName = gitHubAccountName,
+                    Nrc = nrc,
+                    MobileNo = mobileNo
+                });
+            }
+        }
+
+        return users.Any() || validationErrors.Any() ? users : null;
+    }
+}

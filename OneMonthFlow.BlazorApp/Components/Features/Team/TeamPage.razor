@@ -1,0 +1,163 @@
+﻿@page "/teams"
+@using OneMonthFlow.Domain.Shared
+@inject TeamService TeamService
+@inject TechStackService TechStackService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudButton Variant="Variant.Filled" OnClick="OpenCreateTeamDialog" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Add New Team</MudButton>
+
+<MudDataGrid @ref="_dataGrid"
+             Items="@Teams"
+             ReadOnly="true"
+             Hover="true" Dense="true" Striped="true" Bordered="true"
+             Class="mt-4">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Manage Teams</MudText>
+        <MudSpacer />
+    </ToolBarContent>
+    <Columns>
+        <TemplateColumn T="TeamModel" Title="No." Sortable="false" Filterable="false">
+            <CellTemplate>
+                @(Teams.IndexOf(context.Item) + 1 + (Page - 1) * PageSize)
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="x => x.TeamCode" Title="Team Code" Sortable="true" />
+        <PropertyColumn Property="x => x.TeamName" Title="Team Name" Sortable="true" />
+        <TemplateColumn Title="Actions">
+            <CellTemplate>
+                <MudIconButton OnClick="() => OpenEditTeamDialog(context.Item)" Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" Title="Edit Team" />
+                <MudIconButton OnClick="() => ConfirmDeleteTeamAsync(context.Item)" Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" Title="Delete Team" />
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <PagerContent>
+        <MudDataGridPager T="TeamModel" PageSizeOptions="@(new int[] { 10, 20, 50 })" />
+    </PagerContent>
+</MudDataGrid>
+
+@code {
+    private List<TeamModel> Teams = new();
+    private int TotalCount = 0;
+    private int Page = 1;
+    private int PageSize = 10;
+    private string FilterValue = string.Empty;
+
+    private MudDataGrid<TeamModel>? _dataGrid;
+
+    private int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTeamsAsync();
+    }
+
+    private async Task LoadTeamsAsync()
+    {
+        var result = await TeamService.GetTeamsAsync(Page, PageSize, null, FilterValue);
+        if (result.IsSuccess && result.Data != null)
+        {
+            Teams = result.Data.Teams;
+            TotalCount = result.Data.TotalCount;
+        }
+        else
+        {
+            HandleError(result);
+        }
+        StateHasChanged();
+    }
+
+    private async Task PageChanged(int newPage)
+    {
+        Page = newPage;
+        await LoadTeamsAsync();
+    }
+
+    private async Task SearchTeamsAsync()
+    {
+        Page = 1;
+        await LoadTeamsAsync();
+    }
+
+    private void HandleError<T>(Result<T> result)
+    {
+        var message = result.Message ?? "An unknown error occurred.";
+        var severity = result.GetResultType() switch
+        {
+            EnumResultType.ValidationError => Severity.Warning,
+            EnumResultType.NotFoundError => Severity.Info,
+            _ => Severity.Error,
+        };
+        var messages = message.Split(';').Where(m => !string.IsNullOrWhiteSpace(m));
+        foreach (var errorMsg in messages)
+        {
+            Snackbar.Add(errorMsg, severity);
+        }
+    }
+
+    private async Task OpenCreateTeamDialog()
+    {
+        var dialogOptions = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = DialogService.Show<AddTeamDialog>("Add New Team", dialogOptions);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is bool data && data)
+        {
+            await LoadTeamsAsync();
+        }
+    }
+
+    private async Task OpenEditTeamDialog(TeamModel team)
+    {
+        var parameters = new DialogParameters<EditTeamDialog>
+        {
+            { x => x.TeamId, team.TeamId },
+            { x => x.Request, new TeamRequestModel
+                {
+                    TeamCode = team.TeamCode,
+                    TeamName = team.TeamName
+                }
+            }
+        };
+        var dialogOptions = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = DialogService.Show<EditTeamDialog>("Edit Team", parameters, dialogOptions);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is bool data && data)
+        {
+            await LoadTeamsAsync();
+        }
+    }
+
+    private async Task ConfirmDeleteTeamAsync(TeamModel team)
+    {
+        var parameters = new DialogParameters
+        {
+            { nameof(ConfirmDialog.ContentText), $"Are you sure you want to delete team '{team.TeamName} ({team.TeamCode})'?" },
+            { nameof(ConfirmDialog.ButtonText), "Delete" },
+            { nameof(ConfirmDialog.Color), Color.Error }
+        };
+        var dialogOptions = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+        var dialog = DialogService.Show<ConfirmDialog>("Confirm Delete", parameters, dialogOptions);
+        var dialogResult = await dialog.Result;
+
+        if (!dialogResult.Canceled && dialogResult.Data is bool confirmed && confirmed)
+        {
+            await DeleteTeamAsync(team.TeamId, team.TeamName);
+        }
+    }
+
+    private async Task DeleteTeamAsync(string teamId, string teamNameForMessage)
+    {
+        var deleteResult = await TeamService.DeleteTeamAsync(teamId);
+        if (deleteResult.IsSuccess && deleteResult.Data)
+        {
+            Snackbar.Add($"Team '{teamNameForMessage}' deleted successfully.", Severity.Success);
+            await LoadTeamsAsync();
+        }
+        else
+        {
+            HandleError(deleteResult);
+        }
+    }
+}

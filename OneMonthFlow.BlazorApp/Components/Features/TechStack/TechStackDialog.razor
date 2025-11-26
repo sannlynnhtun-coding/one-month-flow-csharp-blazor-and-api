@@ -1,0 +1,67 @@
+﻿@inject IDialogService DialogService
+@inject TechStackService TechStackService
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="@success" @bind-Errors="@errors">
+            <MudTextField @bind-Value="_techStackModel.TechStackCode" Label="Tech Stack Code" Required="true" RequiredError="Tech Stack Code is required!" />
+            <MudTextField @bind-Value="_techStackModel.TechStackShortCode" Label="Tech Stack Short Code" />
+            <MudTextField @bind-Value="_techStackModel.TechStackName" Label="Tech Stack Name" Required="true" RequiredError="Tech Stack Name is required!" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Disabled="@(!success)" OnClick="Save">@(TechStackToEdit == null ? "Create" : "Update")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+
+    [Parameter]
+    public TechStackModel TechStackToEdit { get; set; }
+
+    private TechStackRequestModel _techStackModel = new();
+    private MudForm _form;
+    private bool success;
+    private string[] errors = { };
+
+    protected override void OnInitialized()
+    {
+        if (TechStackToEdit != null)
+        {
+            _techStackModel = new TechStackRequestModel
+            {
+                TechStackCode = TechStackToEdit.TechStackCode,
+                TechStackShortCode = TechStackToEdit.TechStackShortCode,
+                TechStackName = TechStackToEdit.TechStackName
+            };
+        }
+    }
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (success)
+        {
+            if (TechStackToEdit == null)
+            {
+                var result = await TechStackService.CreateTechStackAsync(_techStackModel);
+                if (result.IsSuccess)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+            }
+            else
+            {
+                var result = await TechStackService.UpdateTechStackAsync(TechStackToEdit.TechStackId, _techStackModel);
+                if (result.IsSuccess)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+            }
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

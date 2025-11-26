@@ -1,0 +1,383 @@
+﻿@page "/teams/members"
+@page "/teams/members/{Id}" 
+@using OneMonthFlow.Domain.Shared 
+
+@inject TeamUserService TeamUserService
+@inject ISnackbar Snackbar 
+
+<MudCard>
+    <MudCardContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudAutocomplete T="TeamModel"
+                                 Label="Search Team by Code or Name"
+                                 Placeholder="Enter team code or name"
+                                 Value="Team"
+                                 ValueChanged="OnTeamChangedAsync"
+                                 SearchFunc="SearchTeams"
+                                 ToStringFunc="team => GetTeamDisplayText(team)"
+                                 Variant="Variant.Filled"
+                                 Margin="Margin.Dense"
+                                 ShowProgressIndicator="true"
+                                 DebounceInterval="300" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.h6" Class="mb-2">Choose Users from All Users</MudText>
+                <MudDataGrid T="UserModel" MultiSelection="true" Items="@AllUsers" Filterable="true" QuickFilter="@_quickFilterForAllUsers"
+                             @bind-SelectedItems="SelectedUsers" Hover="true" Dense="true" Bordered="true" Style="height: 400px; overflow: auto;">
+                    <ToolBarContent>
+                        <MudText Typo="Typo.subtitle1">Available Users (@AllUsers.Count)</MudText>
+                        <MudSpacer />
+                        <MudTextField @bind-Value="_searchStringForAllUsers" Placeholder="Search All Users" Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0" Dense="true" Immediate="true" />
+                    </ToolBarContent>
+                    <Columns>
+                        <SelectColumn T="UserModel" />
+                        <PropertyColumn Property="x => x.UserName" Title="Name" Sortable="true" />
+                        <PropertyColumn Property="x => x.UserCode" Title="User Code" Sortable="true" />
+                        <PropertyColumn Property="x => x.GitHubAccountName" Title="GitHub" Sortable="true" />
+                    </Columns>
+                    <PagerContent>
+                        <MudDataGridPager PageSizeOptions="[10, 20, 50]" RowsPerPageString="Rows:" T="UserModel" />
+                    </PagerContent>
+                </MudDataGrid>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.h6" Class="mb-2">Selected Users for Team: @(Team?.TeamName ?? "N/A")</MudText>
+                <MudDataGrid T="UserModel" Items="@SelectedUsers.ToList()" ReadOnly="false" Filterable="true" QuickFilter="@_quickFilterForSelectedUsers"
+                             Hover="true" Dense="true" Bordered="true" Style="height: 400px; overflow: auto;">
+                    <ToolBarContent>
+                        <MudText Typo="Typo.subtitle1">Current Selection (@SelectedUsers.Count)</MudText>
+                        <MudSpacer />
+                        <MudTextField @bind-Value="_searchStringForSelectedUsers" Placeholder="Search Selected Users" Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0" Dense="true" Immediate="true" />
+                    </ToolBarContent>
+                    <Columns>
+                        <PropertyColumn Property="x => x.UserName" Title="Name" Sortable="true" />
+                        <PropertyColumn Property="x => x.UserCode" Title="User Code" Sortable="true" />
+                        <PropertyColumn Property="x => x.GitHubAccountName" Title="GitHub" Sortable="true" />
+                        <TemplateColumn Title="Actions" StickyRight="true">
+                            <CellTemplate>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Title="Remove from selection"
+                                               OnClick="@(() => RemoveUserFromSelection(context.Item))" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <PagerContent>
+                        <MudDataGridPager PageSizeOptions="[10, 20, 50]" RowsPerPageString="Rows:" T="UserModel" />
+                    </PagerContent>
+                    <NoRecordsContent>
+                        <MudText>No users selected or assigned to this team yet.</MudText>
+                    </NoRecordsContent>
+                </MudDataGrid>
+            </MudItem>
+        </MudGrid>
+
+        <div class="mt-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTeamUsers" Disabled="@(Team == null || string.IsNullOrEmpty(Team.TeamCode))">
+                Save Team Members
+            </MudButton>
+        </div>
+
+    </MudCardContent>
+</MudCard>
+
+<MudExpansionPanels Style="flex:1; margin-top:20px;">
+    <MudExpansionPanel Text="Show Events Log">
+        @if (!_events.Any())
+        {
+            <MudText Typo="Typo.caption">No events yet.</MudText>
+        }
+        @foreach (var message in _events)
+        {
+            <MudText Typo="Typo.caption">@message</MudText>
+        }
+        @if (_events.Any())
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => _events.Clear())" StartIcon="@Icons.Material.Filled.ClearAll" Class="mt-2">Clear Log</MudButton>
+        }
+    </MudExpansionPanel>
+</MudExpansionPanels>
+
+@code {
+    [Parameter]
+    public string? Id { get; set; } // TeamCode from route, nullable
+
+    private List<UserModel> AllUsers = new();
+    private HashSet<UserModel> SelectedUsers = new HashSet<UserModel>(new UserModelComparer()); // Use a custom comparer for HashSet
+
+    private string _searchStringForAllUsers = string.Empty;
+    private string _searchStringForSelectedUsers = string.Empty;
+    private List<string> _events = new();
+
+    private TeamModel? _team; // Nullable, as no team might be selected initially
+    public TeamModel? Team
+    {
+        get => _team;
+        set
+        {
+            // This setter is called by @bind-Value.
+            // We use ValueChanged on MudAutocomplete to handle async logic.
+            _team = value;
+        }
+    }
+
+    // Quick filter for All Users grid
+    private Func<UserModel, bool> _quickFilterForAllUsers => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_searchStringForAllUsers))
+            return true;
+        return (x.UserCode?.Contains(_searchStringForAllUsers, StringComparison.OrdinalIgnoreCase) == true) ||
+               (x.UserName?.Contains(_searchStringForAllUsers, StringComparison.OrdinalIgnoreCase) == true) ||
+               (x.GitHubAccountName?.Contains(_searchStringForAllUsers, StringComparison.OrdinalIgnoreCase) == true);
+    };
+
+    // Quick filter for Selected Users grid
+    private Func<UserModel, bool> _quickFilterForSelectedUsers => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_searchStringForSelectedUsers))
+            return true;
+        return (x.UserCode?.Contains(_searchStringForSelectedUsers, StringComparison.OrdinalIgnoreCase) == true) ||
+               (x.UserName?.Contains(_searchStringForSelectedUsers, StringComparison.OrdinalIgnoreCase) == true) ||
+               (x.GitHubAccountName?.Contains(_searchStringForSelectedUsers, StringComparison.OrdinalIgnoreCase) == true);
+    };
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        LogEvent("Page Initializing...");
+        var usersResult = await TeamUserService.SearchUsersAsync(string.Empty); // Load all users
+        if (usersResult.IsSuccess && usersResult.Data != null)
+        {
+            AllUsers = usersResult.Data.ToList();
+            LogEvent($"Loaded {AllUsers.Count} users into 'All Users' list.");
+        }
+        else
+        {
+            LogEvent($"Error loading users: {usersResult.Message}");
+            Snackbar.Add($"Error loading users: {usersResult.Message}", Severity.Error);
+        }
+
+        if (!string.IsNullOrWhiteSpace(Id)) // Id is the TeamCode from route
+        {
+            LogEvent($"TeamCode '{Id}' provided in route. Attempting to load team.");
+            var teams = await SearchTeamsInternalAsync(Id);
+            var teamToSelect = teams.FirstOrDefault(t => string.Equals(t.TeamCode, Id, StringComparison.OrdinalIgnoreCase));
+            if (teamToSelect != null)
+            {
+                Team = teamToSelect; // Set the team property
+                LogEvent($"Team '{Team.TeamName}' found and set. Loading members...");
+                await LoadTeamMembersAndUpdateSelectionsAsync(Team.TeamCode);
+            }
+            else
+            {
+                LogEvent($"Team with code '{Id}' not found.");
+                Snackbar.Add($"Team with code '{Id}' not found.", Severity.Warning);
+            }
+        }
+        LogEvent("Page Initialized.");
+    }
+
+    private async Task OnTeamChangedAsync(TeamModel? newTeam)
+    {
+        LogEvent($"Team selection changed. New team: {newTeam?.TeamName ?? "None"}");
+        // The 'Team' property is already updated by the two-way binding or ValueChanged mechanism.
+        // We use this handler for async operations post-selection.
+        // Note: MudAutocomplete @bind-Value sets _team. If ValueChanged sets Team, ensure no race or double set.
+        // For simplicity, let this handler be the primary place to update the Team state and trigger loads.
+        _team = newTeam; // Explicitly ensure our backing field is set.
+
+        if (newTeam != null && !string.IsNullOrEmpty(newTeam.TeamCode))
+        {
+            await LoadTeamMembersAndUpdateSelectionsAsync(newTeam.TeamCode);
+        }
+        else
+        {
+            SelectedUsers.Clear();
+            LogEvent("Team selection cleared. Selected users cleared.");
+            StateHasChanged(); // Ensure UI updates if team is deselected
+        }
+    }
+
+    private async Task LoadTeamMembersAndUpdateSelectionsAsync(string teamCode)
+    {
+        if (string.IsNullOrEmpty(teamCode))
+        {
+            SelectedUsers.Clear();
+            StateHasChanged();
+            return;
+        }
+
+        LogEvent($"Loading members for team code: {teamCode}");
+        var teamMembersResult = await TeamUserService.GetUsersByTeamCodeAsync(teamCode);
+
+        if (teamMembersResult.IsSuccess && teamMembersResult.Data != null)
+        {
+            var membersFromServer = teamMembersResult.Data;
+            LogEvent($"Successfully fetched {membersFromServer.Count} members for team {teamCode}.");
+
+            var userCodesFromServer = new HashSet<string>(membersFromServer.Select(u => u.UserCode!));
+
+            // Important: Populate SelectedUsers with instances from AllUsers
+            // to ensure MudDataGrid selection works correctly if it relies on reference equality
+            // or if UserModel.Equals/GetHashCode are not overridden robustly for value equality.
+            var newSelectedUsers = new HashSet<UserModel>(
+                AllUsers.Where(u => u.UserCode != null && userCodesFromServer.Contains(u.UserCode)),
+                new UserModelComparer() // Use the comparer for the HashSet
+            );
+
+            SelectedUsers = newSelectedUsers;
+            LogEvent($"Updated SelectedUsers set: {SelectedUsers.Count} users now selected (matching members from AllUsers).");
+        }
+        else
+        {
+            SelectedUsers.Clear(); // Clear selections if loading members fails
+            LogEvent($"Failed to load members for team {teamCode}: {teamMembersResult.Message}");
+            Snackbar.Add($"Failed to load members for {teamCode}: {teamMembersResult.Message}", Severity.Error);
+        }
+        StateHasChanged(); // Update UI
+    }
+
+    private void RemoveUserFromSelection(UserModel userToRemove)
+    {
+        if (SelectedUsers.Contains(userToRemove))
+        {
+            SelectedUsers.Remove(userToRemove);
+            LogEvent($"User '{userToRemove.UserName}' removed from current selection.");
+            // StateHasChanged is implicitly handled by @bind-SelectedItems or by collection modification if UI is bound correctly.
+            // Explicit StateHasChanged can be added if UI doesn't update immediately.
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveTeamUsers()
+    {
+        if (Team == null || string.IsNullOrEmpty(Team.TeamCode))
+        {
+            LogEvent("Save Error: No team selected.");
+            Snackbar.Add("Please select a team first.", Severity.Warning);
+            return;
+        }
+
+        LogEvent($"Saving members for team: {Team.TeamName} ({Team.TeamCode}). {SelectedUsers.Count} users in current selection.");
+
+        // This example saves the *current state* of SelectedUsers.
+        // For a full sync (add new, remove deselected), more complex logic is needed:
+        // 1. Get original members of the team.
+        // 2. Compare with `SelectedUsers` to find users to add and users to remove.
+        // 3. Call appropriate service methods.
+
+        // Current simple "add/update" logic based on what's in SelectedUsers:
+        // It implies that TeamUserService.AddTeamUserAsync handles duplicates gracefully (e.g., as updates or ignores).
+        // Or, this could be a "sync" operation where you send the entire list of UserCodes for the TeamCode.
+        // For now, assuming AddTeamUserAsync will be called for each selected user.
+        // A more robust save would involve sending the list of UserCodes to an endpoint like:
+        // await TeamUserService.SyncTeamMembersAsync(Team.TeamCode, SelectedUsers.Select(u => u.UserCode).ToList());
+
+        // Using existing loop logic for individual adds, as per original code structure:
+        int successCount = 0;
+        int failCount = 0;
+
+        // It's better to prepare a list of requests and send it to a bulk/sync service endpoint if available.
+        // If not, and you must add one-by-one:
+        var usersToAssign = SelectedUsers.Select(u => new TeamUserRequestModel
+        {
+            TeamCode = Team.TeamCode,
+            UserCode = u.UserCode
+            // Add other relevant fields if your TeamUserRequestModel requires them
+        }).ToList();
+
+        // Example: if you have a bulk assignment
+        // var bulkResult = await TeamUserService.AssignUsersToTeamAsync(Team.TeamCode, usersToAssign);
+        // if (bulkResult.IsSuccess) { LogEvent("Bulk assignment successful."); Snackbar.Add("Team members saved.", Severity.Success); }
+        // else { LogEvent($"Bulk assignment failed: {bulkResult.Message}"); Snackbar.Add($"Save failed: {bulkResult.Message}", Severity.Error); }
+
+        // Fallback to individual (less efficient, more chatty):
+        if (usersToAssign.Any())
+        {
+            foreach (var request in usersToAssign)
+            {
+                // This part assumes AddTeamUserAsync is what you intend to call.
+                // If you want to SYNC, you'd get current members, diff, then add/remove.
+                // For now, let's assume AddTeamUserAsync is idempotent or only adds if not present.
+                var result = await TeamUserService.AddTeamUserAsync(request);
+                if (result.IsSuccess)
+                {
+                    successCount++;
+                    LogEvent($"Success: User {request.UserCode} processed for team {Team.TeamCode}.");
+                }
+                else
+                {
+                    failCount++;
+                    LogEvent($"Failed: User {request.UserCode} for team {Team.TeamCode} - {result.Message}");
+                }
+            }
+            Snackbar.Add($"Save complete. {successCount} processed successfully, {failCount} failed.", failCount > 0 ? Severity.Warning : Severity.Success);
+        }
+        else if (Team != null) // No users selected, implies clearing the team or no changes if team was empty.
+        {
+            // If you want to clear all users from a team when SelectedUsers is empty:
+            // var clearResult = await TeamUserService.RemoveAllUsersFromTeamAsync(Team.TeamCode);
+            // LogEvent(clearResult.IsSuccess ? $"All users cleared from team {Team.TeamCode}." : $"Failed to clear users: {clearResult.Message}");
+            // Snackbar.Add(clearResult.IsSuccess ? "Team users cleared." : "Failed to clear team users.", clearResult.IsSuccess ? Severity.Info : Severity.Error);
+            Snackbar.Add("No users selected to save for the team.", Severity.Info);
+            LogEvent("No users currently selected to save.");
+        }
+
+        // Refresh the displayed members after save, in case the save operation itself has side effects or returns the canonical list.
+        await LoadTeamMembersAndUpdateSelectionsAsync(Team.TeamCode!);
+    }
+
+    // Wrapper for SearchTeams for internal use, CancellationToken.None for simplicity here
+    private async Task<IEnumerable<TeamModel>> SearchTeamsInternalAsync(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Array.Empty<TeamModel>();
+        var result = await TeamUserService.SearchTeamsAsync(value);
+        if (result.IsSuccess && result.Data != null)
+        {
+            return result.Data.Distinct().ToList(); // Ensure distinct results
+        }
+        return Array.Empty<TeamModel>();
+    }
+
+    // SearchFunc for MudAutocomplete
+    private async Task<IEnumerable<TeamModel>> SearchTeams(string value, CancellationToken token)
+    {
+        // Debounce is handled by MudAutocomplete, so direct call is fine.
+        return await SearchTeamsInternalAsync(value);
+    }
+
+    private string GetTeamDisplayText(TeamModel? team)
+    {
+        if (team == null) return string.Empty;
+        return !string.IsNullOrWhiteSpace(team.TeamName) ? $"{team.TeamCode} - {team.TeamName}" : team.TeamCode ?? string.Empty;
+    }
+
+    private void LogEvent(string message)
+    {
+        _events.Insert(0, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}");
+        // Optionally, limit the number of events to keep memory usage down.
+        const int maxEvents = 100;
+        if (_events.Count > maxEvents)
+        {
+            _events.RemoveRange(maxEvents, _events.Count - maxEvents);
+        }
+    }
+
+    // Custom comparer for UserModel based on UserCode to be used with HashSet
+    public class UserModelComparer : IEqualityComparer<UserModel>
+    {
+        public bool Equals(UserModel? x, UserModel? y)
+        {
+            if (ReferenceEquals(x, y)) return true;
+            if (x is null || y is null) return false;
+            return string.Equals(x.UserCode, y.UserCode, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public int GetHashCode(UserModel obj)
+        {
+            return obj.UserCode?.ToLowerInvariant().GetHashCode() ?? 0;
+        }
+    }
+}

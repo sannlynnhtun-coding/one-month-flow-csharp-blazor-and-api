@@ -1,0 +1,74 @@
+﻿@page "/about"
+
+<PageTitle>About One Month Flow</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">One Month Flow - Project Management System</MudText>
+
+<MudText Typo="Typo.body1" Class="mb-4">
+    ဒီ Admin Portal ကတော့ Project တွေကို စီမံခန့်ခွဲဖို့ တည်ဆောက်ထားတာပါ။ အဓိက အပိုင်းတွေကတော့ ...
+</MudText>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" sm="12" md="12">
+        <MudPaper Class="pa-4" Elevation="3">
+            <MudText Typo="Typo.h6" GutterBottom="true">၁။ User (အသုံးပြုသူ) နှင့် Tech Stack (နည်းပညာ ကျွမ်းကျင်မှု)</MudText>
+            <MudText Typo="Typo.body2">
+                ပထမဆုံး အသုံးပြုသူ (User) တွေကို စနစ်ထဲမှာ ထည့်သွင်းရပါမယ်။
+                User တစ်ယောက်ချင်းစီမှာ သူတို့ကျွမ်းကျင်တဲ့ နည်းပညာတွေ (Tech Stacks) ကို သတ်မှတ်ပေးရပါမယ်။ (ဥပမာ - User A က Java, Python ကျွမ်းကျင်တယ်)။
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="12" md="12">
+        <MudPaper Class="pa-4" Elevation="3">
+            <MudText Typo="Typo.h6" GutterBottom="true">၂။ Team (အဖွဲ့)</MudText>
+            <MudText Typo="Typo.body2">
+                Team (အဖွဲ့) တွေ ဖွဲ့ပြီး သက်ဆိုင်ရာ User တွေကို ထည့်သွင်းရပါမယ်။ (ဥပမာ - Team Alpha မှာ User A, User B ပါဝင်တယ်)။
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="12" md="12">
+        <MudPaper Class="pa-4" Elevation="3">
+            <MudText Typo="Typo.h6" GutterBottom="true">၃။ Project (စီမံကိန်း)</MudText>
+            <MudText Typo="Typo.body2">
+                Project အသစ်တွေ ဖန်တီးတဲ့အခါ၊ အဲ့ဒီ Project ကို တာဝန်ယူမယ့် Team ကို ရွေးချယ် သတ်မှတ်ပေးရပါမယ်။ (ဥပမာ - Project X ကို Team Alpha က တာဝန်ယူတယ်)။
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="12" md="12">
+        <MudPaper Class="pa-4" Elevation="3">
+            <MudText Typo="Typo.h6" GutterBottom="true">၄။ Project Activity (စီမံကိန်း လုပ်ဆောင်ချက်)</MudText>
+            <MudText Typo="Typo.body2">
+                Project တစ်ခုအတွက် သက်ဆိုင်ရာ Team က ဘာတွေလုပ်ဆောင်နေတယ်ဆိုတဲ့ Activity တွေကို မှတ်တမ်းတင်ရပါမယ်။ (ဥပမာ - Project X အတွက် Team Alpha က ဒီနေ့ ဘာ Tasks တွေ လုပ်တယ်)။
+            </MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h5" Class="mt-6 mb-3">အနှစ်ချုပ် Workflow (လုပ်ငန်းစဉ်)</MudText>
+<MudList T="string" Clickable="false">
+    <MudListItem Icon="@Icons.Material.Filled.CheckCircleOutline" IconColor="Color.Success">
+        အသုံးပြုသူ (User) တွေဖန်တီးမယ်။
+    </MudListItem>
+    <MudListItem Icon="@Icons.Material.Filled.CheckCircleOutline" IconColor="Color.Success">
+        သူတို့ရဲ့ ကျွမ်းကျင်မှု (Tech Stack) တွေထည့်မယ်။
+    </MudListItem>
+    <MudListItem Icon="@Icons.Material.Filled.CheckCircleOutline" IconColor="Color.Success">
+        အဖွဲ့ (Team) တွေဖွဲ့ပြီး User တွေထည့်မယ်။
+    </MudListItem>
+    <MudListItem Icon="@Icons.Material.Filled.CheckCircleOutline" IconColor="Color.Success">
+        စီမံကိန်း (Project) တွေဖန်တီးပြီး Team တွေ သတ်မှတ်မယ်။
+    </MudListItem>
+    <MudListItem Icon="@Icons.Material.Filled.CheckCircleOutline" IconColor="Color.Success">
+        နောက်ဆုံးမှာ Team တွေက Project အတွက် လုပ်ဆောင်ချက် (Activity) တွေကို မှတ်တမ်းတင်မယ်။
+    </MudListItem>
+</MudList>
+
+<MudText Typo="Typo.body1" Class="mt-4">
+    ဒါကတော့ "One Month Flow" Project Management System ရဲ့ အခြေခံသဘောတရားနဲ့ အလုပ်လုပ်ပုံ အကျဉ်းချုပ် ဖြစ်ပါတယ်။
+</MudText>
+
+@code {
+}

@@ -1,0 +1,94 @@
+﻿<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(IsReadOnly? Icons.Material.Filled.Info : IsEdit? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2" /> @DialogTitle
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_formValid">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField Label="Project Code" @bind-Value="Project.ProjectCode" For="@(() => Project.ProjectCode)" Required="true" ReadOnly="IsReadOnly" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField Label="Project Name" @bind-Value="Project.ProjectName" For="@(() => Project.ProjectName)" Required="true" ReadOnly="IsReadOnly" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField Label="Repository URL" @bind-Value="Project.RepoUrl" For="@(() => Project.RepoUrl)" ReadOnly="IsReadOnly" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker Label="Start Date" @bind-Date="Project.StartDate" For="@(() => Project.StartDate)" ReadOnly="IsReadOnly" Variant="Variant.Outlined" Margin="Margin.Dense" PickerVariant="PickerVariant.Dialog" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker Label="End Date" @bind-Date="Project.EndDate" For="@(() => Project.EndDate)" ReadOnly="IsReadOnly" Variant="Variant.Outlined" Margin="Margin.Dense" PickerVariant="PickerVariant.Dialog" MinDate="Project.StartDate" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField Label="Project Description" @bind-Value="Project.ProjectDescription" For="@(() => Project.ProjectDescription)" Lines="3" ReadOnly="IsReadOnly" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect Label="Status" @bind-Value="Project.Status" For="@(() => Project.Status)" ReadOnly="IsReadOnly" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        <MudSelectItem Value="@("Not Started")">Not Started</MudSelectItem>
+                        <MudSelectItem Value="@("In Progress")">In Progress</MudSelectItem>
+                        <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                        <MudSelectItem Value="@("On Hold")">On Hold</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        @if (!IsReadOnly)
+        {
+            <MudButton OnClick="Submit" Disabled="@(!_formValid)" Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Save">Save</MudButton>
+        }
+        @if (IsEdit && !IsReadOnly)
+        {
+            <MudButton OnClick="DeleteWithConfirmation" Color="Color.Error" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete">Delete</MudButton>
+        }
+        <MudButton OnClick="Cancel" Variant="Variant.Outlined">@(IsReadOnly ? "Close" : "Cancel")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Inject] IDialogService DialogService { get; set; } = default!; // For delete confirmation
+
+    [Parameter] public ProjectModel Project { get; set; } = new();
+    [Parameter] public bool IsEdit { get; set; }
+    [Parameter] public bool IsReadOnly { get; set; }
+
+    private string DialogTitle => IsReadOnly ? "Project Details" : IsEdit ? "Edit Project" : "Add New Project";
+    MudForm? _form;
+    bool _formValid;
+
+
+    private async Task Submit()
+    {
+        await _form!.Validate();
+        if (!_formValid) return;
+        MudDialog.Close(DialogResult.Ok((Project, "save")));
+    }
+
+    private async Task DeleteWithConfirmation()
+    {
+        var parameters = new DialogParameters
+        {
+            { "ContentText", $"Are you sure you want to delete project '{Project.ProjectName}'?" },
+            { "ButtonText", "Delete" },
+            { "Color", Color.Error },
+            { "DialogTitle", "Confirm Deletion" }
+        };
+        var options = new DialogOptions() { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+
+        // Assuming ConfirmationDialog is your custom dialog for this
+        var dialog = await DialogService.ShowAsync<ConfirmationDialog>("Confirm Deletion", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is bool confirmed && confirmed)
+        {
+            MudDialog.Close(DialogResult.Ok((Project, "delete")));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -1,0 +1,130 @@
+@inject UserService UserService
+@inject TechStackService TechStackService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Edit User</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm Model="@Request" @ref="form" ValidationDelay="0">
+            @* UserCode is an identifier, not typically edited. Display if needed, but not as an editable field.
+            <MudTextField @bind-Value="Request.UserCode" Label="User Code" ReadOnly="true" /> *@
+            <MudTextField @bind-Value="Request.UserName" For="@(() => Request.UserName)" Label="User Name" Required="true" RequiredError="User Name is required." />
+            <MudTextField @bind-Value="Request.GitHubAccountName" For="@(() => Request.GitHubAccountName)" Label="GitHub Account" />
+            <MudTextField @bind-Value="Request.Nrc" For="@(() => Request.Nrc)" Label="NRC" />
+            <MudTextField @bind-Value="Request.MobileNo" For="@(() => Request.MobileNo)" Label="Mobile No" />
+
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Assigned Tech Stacks:</MudText>
+            @if (AllAvailableTechStacks == null)
+            {
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                <MudText>Loading tech stacks...</MudText>
+            }
+            else if (!AllAvailableTechStacks.Any())
+            {
+                <MudText>No tech stacks available to assign.</MudText>
+            }
+            else
+            {
+                <MudGrid Spacing="2">
+                    @foreach (var techStack in AllAvailableTechStacks)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCheckBox @bind-Value="@SelectedTechStackMap[techStack.TechStackCode]" Dense="true" Label="@techStack.TechStackName" Color="Color.Primary" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Color="Color.Secondary" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="SubmitAsync" Color="Color.Primary" Variant="Variant.Filled" Disabled="@(form == null || !form.IsValid || isSubmitting)">Update</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public string UserId { get; set; } = string.Empty;
+    [Parameter] public UserRequestModel Request { get; set; } = new();
+
+    private MudForm? form;
+    private bool isSubmitting = false;
+
+    private List<TechStackModel> AllAvailableTechStacks { get; set; } = new();
+    private Dictionary<string, bool> SelectedTechStackMap { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // --- Placeholder for fetching tech stacks ---
+        await LoadAvailableTechStacks(); // Ensure this method exists and works
+        // --- End Placeholder ---
+
+        // Initialize the map for checkboxes based on the current user's tech stacks
+        foreach (var ts in AllAvailableTechStacks)
+        {
+            // Request.TechStackCodes should be pre-populated by Users.razor
+            SelectedTechStackMap[ts.TechStackCode] = Request.TechStackCodes?.Contains(ts.TechStackCode) ?? false;
+        }
+    }
+
+    // Placeholder method to simulate loading tech stacks (Same as AddUserDialog)
+    private async Task LoadAvailableTechStacks()
+    {
+        var techStackResult = await TechStackService.GetAllTechStacksAsync();
+        if (techStackResult.IsSuccess) AllAvailableTechStacks = techStackResult.Data!;
+        else Snackbar.Add("Error loading tech stacks", Severity.Error);
+
+        // await Task.Delay(50);
+        // AllAvailableTechStacks = new List<TechStackModel>
+        // {
+        //     new TechStackModel { TechStackId = "ts1", TechStackCode = "C_SHARP", TechStackName = ".NET C#", TechStackShortCode="C#" },
+        //     new TechStackModel { TechStackId = "ts2", TechStackCode = "BLAZOR", TechStackName = "Blazor", TechStackShortCode="Blazor" },
+        //     new TechStackModel { TechStackId = "ts3", TechStackCode = "SQL_SERVER", TechStackName = "SQL Server", TechStackShortCode="SQL" },
+        //     new TechStackModel { TechStackId = "ts4", TechStackCode = "REACT", TechStackName = "React", TechStackShortCode="React" },
+        //     new TechStackModel { TechStackId = "ts5", TechStackCode = "ANGULAR", TechStackName = "Angular", TechStackShortCode="Angular" }
+        // };
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (form == null) return;
+        await form.Validate();
+
+        if (form.IsValid)
+        {
+            isSubmitting = true;
+            Request.TechStackCodes = SelectedTechStackMap.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+
+            var result = await UserService.UpdateUserAsync(UserId, Request);
+            isSubmitting = false;
+
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("User updated successfully", Severity.Success);
+                MudDialog?.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                HandleError(result);
+            }
+        }
+    }
+
+    private void HandleError<T>(Result<T> result)
+    {
+        if (result == null || string.IsNullOrEmpty(result.Message))
+        {
+            Snackbar.Add("An unexpected error occurred.", Severity.Error);
+            return;
+        }
+        var errorMessages = result.Message.Split(new[] { ';', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var error in errorMessages)
+        {
+            Snackbar.Add(error.Trim(), Severity.Error);
+        }
+    }
+
+    private void Cancel() => MudDialog?.Cancel();
+}

@@ -1,0 +1,19 @@
+﻿<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+
+    <MudNavLink Href="/tech-stacks" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Code">Tech Stack Management</MudNavLink>
+
+    <MudNavLink Href="/users" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Person">User Management</MudNavLink>
+
+    <MudNavGroup Title="Teams" Icon="@Icons.Material.Filled.People">
+        <MudNavLink Href="/teams" Match="NavLinkMatch.All">Team List</MudNavLink>
+        <MudNavLink Href="/teams/members" Match="NavLinkMatch.All">Team Members</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="Project Management" Icon="@Icons.Material.Filled.Work">
+        <MudNavLink Href="/project-management" Match="NavLinkMatch.Prefix">Manage Projects</MudNavLink>
+        <MudNavLink Href="/projects/activity" Match="NavLinkMatch.All">Project Activity Log</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavLink Href="/about" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Info">About</MudNavLink>
+</MudNavMenu>

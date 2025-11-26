@@ -1,0 +1,133 @@
+﻿@using OneMonthFlow.Domain.Shared
+@inject TeamService TeamService 
+@inject TechStackService TechStackService
+@inject ISnackbar Snackbar 
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Edit Team</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm Model="@Request" @ref="form">
+            <MudTextField @bind-Value="Request.TeamCode" Label="Team Code" Required="true" For="@(() => Request.TeamCode)" ReadOnly="true" HelperText="Team Code cannot be changed."/>
+            <MudTextField @bind-Value="Request.TeamName" Label="Team Name" Required="true" For="@(() => Request.TeamName)"/>
+
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">Assigned Tech Stacks</MudText>
+            @if (loadingTechStacks)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" /> <MudText Inline="true">Loading tech stacks...</MudText>
+            }
+            else if (AllTechStacks.Any())
+            {
+                <MudGrid Spacing="2">
+                    @foreach (var techStack in AllTechStacks)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCheckBox T="bool" Label="@techStack.TechStackName"
+                                        Value="@IsTechStackSelected(techStack.TechStackCode)"
+                                        ValueChanged="@((bool val) => OnTechStackSelectionChanged(val, techStack.TechStackCode))" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+            else
+            {
+                <MudText>No tech stacks available.</MudText>
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Color="Color.Secondary" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="SubmitAsync" Color="Color.Primary" Variant="Variant.Filled">Update</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
+
+    [Parameter] public string TeamId { get; set; } = string.Empty; // Passed from parent page
+    [Parameter] public TeamRequestModel Request { get; set; } = new(); // Pre-filled with TeamCode, TeamName from parent page
+
+    private MudForm? form;
+    private List<TechStackModel> AllTechStacks { get; set; } = new();
+    private bool loadingTechStacks = true;
+
+    protected override async Task OnInitializedAsync() // Or OnParametersSetAsync if TeamId/Request can change after init
+    {
+        loadingTechStacks = true;
+        StateHasChanged(); // Indicate loading
+
+        // 1. Load All Available TechStacks
+        var allStacksResult = await TechStackService.GetAllTechStacksAsync();
+        if (allStacksResult.IsSuccess && allStacksResult.Data != null)
+        {
+            AllTechStacks = allStacksResult.Data;
+        }
+        else
+        {
+            Snackbar.Add($"Error loading available tech stacks: {allStacksResult.Message}", Severity.Warning);
+        }
+
+        // 2. Load Currently Assigned TechStacks for this team (using Request.TeamCode passed in via parameters)
+        if (!string.IsNullOrWhiteSpace(Request.TeamCode))
+        {
+            var currentStacksResult = await TeamService.GetTechStackCodesByTeamCodeAsync(Request.TeamCode);
+            if (currentStacksResult.IsSuccess && currentStacksResult.Data != null)
+            {
+                Request.TechStackCodes = currentStacksResult.Data; // Initialize selection
+            }
+            else
+            {
+                Snackbar.Add($"Error loading current tech stacks for team '{Request.TeamCode}': {currentStacksResult.Message}", Severity.Warning);
+            }
+        }
+        loadingTechStacks = false;
+        StateHasChanged(); // Refresh UI after loading
+    }
+
+    private bool IsTechStackSelected(string techStackCode)
+    {
+        return Request.TechStackCodes.Any(x=> x == techStackCode);
+    }
+
+    private void OnTechStackSelectionChanged(bool isSelected, string techStackCode)
+    {
+        if (isSelected)
+        {
+            if (!Request.TechStackCodes.Contains(techStackCode))
+            {
+                Request.TechStackCodes.Add(techStackCode);
+            }
+        }
+        else
+        {
+            Request.TechStackCodes.Remove(techStackCode);
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        await form!.Validate();
+
+        if (form.IsValid)
+        {
+            // TeamId is passed as a parameter, Request contains updated Name and TechStackCodes
+            var result = await TeamService.UpdateTeamAsync(TeamId, Request); 
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Team updated successfully", Severity.Success);
+                MudDialog?.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                var messages = result.Message?.Split(';') ?? new[] { "An unknown error occurred." };
+                foreach (var error in messages.Where(m => !string.IsNullOrWhiteSpace(m)))
+                {
+                    Snackbar.Add(error, Severity.Error);
+                }
+            }
+        }
+    }
+
+    private void Cancel() => MudDialog?.Cancel();
+}

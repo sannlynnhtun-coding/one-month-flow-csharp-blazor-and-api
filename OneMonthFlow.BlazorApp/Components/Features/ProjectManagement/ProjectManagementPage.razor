@@ -1,0 +1,403 @@
+﻿@page "/project-management"
+@using OneMonthFlow.Domain.Shared
+
+@inject ProjectService ProjectService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudCard>
+    <MudCardContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudAutocomplete T="ProjectModel"
+                                     Label="Search Project"
+                                     Placeholder="Enter project name or code"
+                                     Value="_internalSelectedProject"
+                                     ValueChanged="OnSelectedProjectChanged"
+                                     SearchFunc="SearchProjects"
+                                     ToStringFunc="project => project?.ProjectName"
+                                     Variant="Variant.Filled" Margin="Margin.Dense" ShowProgressIndicator="true" Class="flex-grow-1" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" OnClick="@(() => OpenProjectDialog())" Title="Add New Project" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ListAlt" OnClick="@OpenProjectListDialog" Title="Show Project List" />
+                    @if (_internalSelectedProject != null)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" OnClick="@(() => OpenProjectDialog(_internalSelectedProject, true))" Color="Color.Info" Title="View Project Details" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenProjectDialog(_internalSelectedProject))" Color="Color.Primary" Title="Edit Project" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Clear" OnClick="ClearSelectedProject" Color="Color.Warning" Title="Clear Selection" />
+                    }
+                </MudStack>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudDataGrid T="TeamModel"
+                             Items="@AllTeams"
+                             MultiSelection="true"
+                             Filterable="true"
+                             @bind-SelectedItems="_selectedTeamsForAssignment" Hover="true" Dense="true" Bordered="true"
+                             FilterFunction="@(new Func<TeamModel, bool>(SearchTeams))">
+                    <ToolBarContent>
+                        <MudText Typo="Typo.h6">Choose Teams</MudText>
+                        <MudSpacer />
+                        <MudTextField @bind-Value="_searchStringTeams" Placeholder="Search All Teams" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="mt-0" Immediate="true" />
+                    </ToolBarContent>
+                    <Columns>
+                        <SelectColumn T="TeamModel" />
+                        <PropertyColumn Property="x => x.TeamCode" Title="Code" />
+                        <PropertyColumn Property="x => x.TeamName" Title="Name" />
+                    </Columns>
+                    <PagerContent>
+                        <MudDataGridPager PageSizeOptions="[5, 10, 20]" RowsPerPageString="Rows:" T="TeamModel" />
+                    </PagerContent>
+                </MudDataGrid>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveProjectTeams" Disabled="@(_internalSelectedProject == null || !_selectedTeamsForAssignment.Any())" Class="mt-2">
+                    Assign Selected Teams
+                </MudButton>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="my-2">Teams for @(_internalSelectedProject?.ProjectName ?? "N/A")</MudText>
+                @if (_internalSelectedProject != null)
+                {
+                    <MudDataGrid T="TeamModel"
+                                 Items="@_currentProjectAssignedTeams" ReadOnly="true"
+                                 Hover="true" Dense="true" Bordered="true"
+                                 Filterable="true"
+                                 FilterFunction="@(new Func<TeamModel, bool>(SearchCurrentProjectAssignedTeams))">
+                        <ToolBarContent>
+                            <MudText Typo="Typo.h6">Assigned Teams (@_currentProjectAssignedTeams.Count)</MudText>
+                            <MudSpacer />
+                            <MudTextField @bind-Value="_searchStringCurrentProjectAssignedTeams" Placeholder="Search Assigned Teams" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="mt-0" Immediate="true" />
+                        </ToolBarContent>
+                        <Columns>
+                            <PropertyColumn Property="x => x.TeamCode" Title="Code" Sortable="true" />
+                            <PropertyColumn Property="x => x.TeamName" Title="Name" Sortable="true" />
+                            <TemplateColumn Title="Actions" StickyRight="true" Class="mud-table-cell-sticky-right">
+                                <CellTemplate>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Title="Remove Team from Project"
+                                                   OnClick="@(() => ConfirmRemoveTeamFromProject(context.Item))" />
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                        <PagerContent>
+                            <MudDataGridPager PageSizeOptions="[5, 10]" T="TeamModel" />
+                        </PagerContent>
+                    </MudDataGrid>
+                }
+                else
+                {
+                    <MudText>Select a project to see its assigned teams.</MudText>
+                }
+            </MudItem>
+        </MudGrid>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private ProjectModel? _internalSelectedProject;
+
+    private List<TeamModel> AllTeams = new();
+    private HashSet<TeamModel> _selectedTeamsForAssignment = new();
+    private List<TeamModel> _currentProjectAssignedTeams = new();
+    private string _searchStringTeams = string.Empty;
+    private string _searchStringCurrentProjectAssignedTeams = string.Empty;
+
+    private List<TechStackModel> AllAvailableTechStacks = new();
+    private HashSet<TechStackModel> _selectedTechStacksForAssignment = new();
+    private List<string> _currentProjectTechStackCodes = new();
+    private ProjectTechStackPagedResponseModel _pagedProjectTechStacks = new() { TechStackCodes = new List<string>() };
+    private ProjectTechStackPaginationRequestModel _techStackPagination = new() { PageNumber = 1, PageSize = 5 };
+    private string _searchStringAllTechStacks = string.Empty;
+    private string _searchStringProjectTechStacks = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var teamResult = await ProjectService.GetAllTeamsAsync();
+        if (teamResult.IsSuccess && teamResult.Data != null)
+        {
+            AllTeams = teamResult.Data.ToList();
+        }
+        else
+        {
+            var msg = $"Failed to load available teams: {teamResult.Message}";
+            Snackbar.Add(msg, Severity.Error);
+        }
+    }
+
+    private async Task<IEnumerable<ProjectModel>> SearchProjects(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<ProjectModel>();
+        var result = await ProjectService.SearchProjectsAsync(value);
+        return result.IsSuccess && result.Data != null ? result.Data : Enumerable.Empty<ProjectModel>();
+    }
+
+    private async Task OnSelectedProjectChanged(ProjectModel? project)
+    {
+        if (_internalSelectedProject?.ProjectId != project?.ProjectId)
+        {
+            _internalSelectedProject = project;
+            _selectedTeamsForAssignment.Clear();
+            _selectedTechStacksForAssignment.Clear();
+            _currentProjectAssignedTeams.Clear();
+            _currentProjectTechStackCodes.Clear();
+            _pagedProjectTechStacks = new() { TechStackCodes = new List<string>() };
+
+            if (_internalSelectedProject != null)
+            {
+                await LoadCurrentProjectAssignedTeamsAsync();
+            }
+            StateHasChanged();
+        }
+    }
+
+    private bool SearchTeams(TeamModel team)
+    {
+        if (string.IsNullOrWhiteSpace(_searchStringTeams)) return true;
+        if (team.TeamCode?.Contains(_searchStringTeams, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (team.TeamName?.Contains(_searchStringTeams, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+
+    private bool SearchCurrentProjectAssignedTeams(TeamModel team)
+    {
+        if (string.IsNullOrWhiteSpace(_searchStringCurrentProjectAssignedTeams)) return true;
+        if (team.TeamCode?.Contains(_searchStringCurrentProjectAssignedTeams, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (team.TeamName?.Contains(_searchStringCurrentProjectAssignedTeams, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+
+    private async Task LoadCurrentProjectAssignedTeamsAsync()
+    {
+        if (_internalSelectedProject == null)
+        {
+            _currentProjectAssignedTeams.Clear();
+            StateHasChanged();
+            return;
+        }
+        var result = await ProjectService.GetTeamsByProjectIdAsync(_internalSelectedProject.ProjectCode);
+        if (result.IsSuccess && result.Data != null)
+        {
+            _currentProjectAssignedTeams = result.Data;
+        }
+        else
+        {
+            _currentProjectAssignedTeams.Clear();
+            var msg = $"Failed to load assigned teams for '{_internalSelectedProject.ProjectName}': {result.Message ?? "Service error"}";
+            Snackbar.Add(msg, Severity.Error);
+        }
+        StateHasChanged();
+    }
+
+    private async Task SaveProjectTeams()
+    {
+        if (_internalSelectedProject == null)
+        {
+            Snackbar.Add("Please select a project.", Severity.Warning);
+            return;
+        }
+        if (!_selectedTeamsForAssignment.Any())
+        {
+            Snackbar.Add("Please select at least one team to assign.", Severity.Warning);
+            return;
+        }
+        var projectTeamRequests = _selectedTeamsForAssignment.Select(team => new ProjectTeamRequestModel
+        {
+            TeamCode = team.TeamCode,
+            Duration = 1,
+            ProjectTeamRating = 5
+        }).ToList();
+
+        var result = await ProjectService.AddTeamsToProjectAsync(_internalSelectedProject.ProjectCode, projectTeamRequests);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add(result.Message ?? "Teams successfully assigned to project.", Severity.Success);
+            _selectedTeamsForAssignment.Clear();
+            await LoadCurrentProjectAssignedTeamsAsync();
+        }
+        else
+        {
+            Snackbar.Add($"Failed to assign teams: {result.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OpenProjectDialog(ProjectModel? model = null, bool isReadOnly = false)
+    {
+        ProjectModel projectToPass;
+        if (model == null)
+        {
+            projectToPass = new ProjectModel();
+        }
+        else
+        {
+            projectToPass = new ProjectModel
+            {
+                ProjectId = model.ProjectId,
+                ProjectName = model.ProjectName,
+                ProjectCode = model.ProjectCode,
+                RepoUrl = model.RepoUrl,
+                StartDate = model.StartDate,
+                EndDate = model.EndDate,
+                ProjectDescription = model.ProjectDescription,
+                Status = model.Status
+            };
+        }
+
+        var parameters = new DialogParameters
+        {
+            { nameof(ProjectDialog.Project), projectToPass },
+            { nameof(ProjectDialog.IsEdit), model != null && !isReadOnly },
+            { nameof(ProjectDialog.IsReadOnly), isReadOnly }
+        };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialogTitle = model == null ? "Add New Project" : (isReadOnly ? $"View Project: {model.ProjectName}" : $"Edit Project: {model.ProjectName}");
+
+        var dialog = DialogService.Show<ProjectDialog>(dialogTitle, parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is ValueTuple<ProjectModel, string> data)
+        {
+            var (returnedProject, action) = data;
+            Result<ProjectResponseModel> serviceCallResult = default!;
+
+            if (action == "save")
+            {
+                serviceCallResult = model == null
+                    ? await ProjectService.AddProjectAsync(returnedProject)
+                    : await ProjectService.UpdateProjectAsync(returnedProject);
+
+                var outcomeMessage = serviceCallResult.IsSuccess
+                    ? $"Project '{(model == null ? returnedProject.ProjectName + " created" : returnedProject.ProjectName + " updated")}' successfully."
+                    : $"Failed to {(model == null ? "create" : "update")} project: {serviceCallResult.Message}";
+                Snackbar.Add(outcomeMessage, serviceCallResult.IsSuccess ? Severity.Success : Severity.Error);
+
+                if (serviceCallResult.IsSuccess)
+                {
+                    if (model == null && serviceCallResult.Data?.Projects?.Any() == true)
+                    {
+                        var newProjectData = serviceCallResult.Data.Projects.First().Project;
+                        var newProjectModel = new ProjectModel
+                        {
+                            ProjectId = newProjectData.ProjectId,
+                            ProjectName = newProjectData.ProjectName,
+                            ProjectCode = newProjectData.ProjectCode,
+                            RepoUrl = newProjectData.RepoUrl,
+                            StartDate = newProjectData.StartDate,
+                            EndDate = newProjectData.EndDate,
+                            ProjectDescription = newProjectData.ProjectDescription,
+                            Status = newProjectData.Status
+                        };
+                        await OnSelectedProjectChanged(newProjectModel);
+                    }
+                    else if (model != null && _internalSelectedProject?.ProjectId == returnedProject.ProjectId)
+                    {
+                        _internalSelectedProject.ProjectName = returnedProject.ProjectName;
+                        _internalSelectedProject.ProjectCode = returnedProject.ProjectCode;
+                        _internalSelectedProject.RepoUrl = returnedProject.RepoUrl;
+                        _internalSelectedProject.StartDate = returnedProject.StartDate;
+                        _internalSelectedProject.EndDate = returnedProject.EndDate;
+                        _internalSelectedProject.ProjectDescription = returnedProject.ProjectDescription;
+                        _internalSelectedProject.Status = returnedProject.Status;
+                        StateHasChanged();
+                    }
+                }
+            }
+            else if (action == "delete")
+            {
+                serviceCallResult = await ProjectService.DeleteProjectAsync(returnedProject.ProjectId);
+                var outcomeMessage = serviceCallResult.IsSuccess
+                    ? $"Project '{returnedProject.ProjectName}' deleted."
+                    : $"Delete failed for project '{returnedProject.ProjectName}': {serviceCallResult.Message}";
+                Snackbar.Add(outcomeMessage, serviceCallResult.IsSuccess ? Severity.Success : Severity.Error);
+
+                if (serviceCallResult.IsSuccess && _internalSelectedProject?.ProjectId == returnedProject.ProjectId)
+                {
+                    await OnSelectedProjectChanged(null);
+                }
+            }
+        }
+    }
+
+    private async Task ConfirmRemoveTeamFromProject(TeamModel team)
+    {
+        if (_internalSelectedProject == null) return;
+
+        var parameters = new DialogParameters
+        {
+            { "ContentText", $"Are you sure you want to remove team '{team.TeamName} ({team.TeamCode})' from project '{_internalSelectedProject.ProjectName}'?" },
+            { "ButtonText", "Remove Team" },
+            { "Color", Color.Error }
+        };
+        var options = new DialogOptions() { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+
+        var dialog = await DialogService.ShowAsync<ConfirmationDialog>("Confirm Team Removal", parameters, options);
+        var dialogResult = await dialog.Result;
+
+        if (!dialogResult.Canceled && dialogResult.Data is bool confirmed && confirmed)
+        {
+            await RemoveTeamFromProjectAsync(team);
+        }
+    }
+
+    private async Task RemoveTeamFromProjectAsync(TeamModel teamToRemove)
+    {
+        if (_internalSelectedProject == null) { Snackbar.Add("No project selected.", Severity.Error); return; }
+        var result = await ProjectService.RemoveTeamFromProjectAsync(_internalSelectedProject.ProjectCode, teamToRemove.TeamCode);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add($"Team '{teamToRemove.TeamName}' removed successfully.", Severity.Success);
+            await LoadCurrentProjectAssignedTeamsAsync();
+        }
+        else
+        {
+            Snackbar.Add($"Failed to remove team: {result.Message}", Severity.Error);
+        }
+        StateHasChanged();
+    }
+
+    private async Task ClearSelectedProject()
+    {
+        if (_internalSelectedProject != null)
+        {
+            string clearedProjectName = _internalSelectedProject.ProjectName ?? "Selected Project";
+            await OnSelectedProjectChanged(null);
+            Snackbar.Add($"Project '{clearedProjectName}' selection cleared.", Severity.Info);
+        }
+    }
+
+    private bool SearchAllTechStacks(TechStackModel techStack)
+    {
+        if (string.IsNullOrWhiteSpace(_searchStringAllTechStacks)) return true;
+        if (techStack.TechStackCode?.Contains(_searchStringAllTechStacks, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (techStack.TechStackName?.Contains(_searchStringAllTechStacks, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+
+    private bool SearchProjectTechStacks(string techStackCode)
+    {
+        if (string.IsNullOrWhiteSpace(_searchStringProjectTechStacks)) return true;
+        if (techStackCode?.Contains(_searchStringProjectTechStacks, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+
+    private async Task OpenProjectListDialog()
+    {
+        var parameters = new DialogParameters();
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            BackdropClick = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ProjectListDialog>("Project List", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is ProjectModel selectedProject)
+        {
+            await OnSelectedProjectChanged(selectedProject);
+        }
+    }
+}

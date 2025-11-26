@@ -1,0 +1,132 @@
+﻿@page "/tech-stacks"
+@inject TechStackService TechStackService
+@inject IJSRuntime JsRuntime
+@inject IDialogService DialogService
+
+<MudText Typo="Typo.h5" Class="mb-4">Tech Stacks</MudText>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => OpenAddEditDialog()">Add New Tech Stack</MudButton>
+
+<MudTable Items="TechStacks" Hover="true" Striped="true" Class="mt-4">
+    <HeaderContent>
+        <MudTh>No.</MudTh>
+        <MudTh>Code</MudTh>
+        <MudTh>Short Code</MudTh>
+        <MudTh>Name</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@(TechStacks.IndexOf(context) + 1 + (Page - 1) * PageSize)</MudTd>
+        <MudTd>@context.TechStackCode</MudTd>
+        <MudTd>@context.TechStackShortCode</MudTd>
+        <MudTd>@context.TechStackName</MudTd>
+        <MudTd>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenAddEditDialog(context)">Edit</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteTechStackAsync(context.TechStackId)">Delete</MudButton>
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+<MudPagination Class="mt-4"
+               Count="@(TotalCount / PageSize + (TotalCount % PageSize > 0 ? 1 : 0))"
+               Page="@Page"
+               SelectedChanged="PageChanged" />
+
+<MudText Class="mt-2" Color="Color.Error">@ErrorMessage</MudText>
+<MudText Class="mt-2" Color="Color.Success">@SuccessMessage</MudText>
+
+@code {
+    private List<TechStackModel> TechStacks = new();
+    private int Page = 1;
+    private int PageSize = 10;
+    private int TotalCount = 0;
+    private string ErrorMessage;
+    private string SuccessMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTechStacksAsync();
+    }
+
+    private async Task LoadTechStacksAsync()
+    {
+        var result = await TechStackService.GetTechStacksAsync(Page, PageSize, filterValue: "");
+        if (result.IsSuccess)
+        {
+            TechStacks = result.Data.TechStacks;
+            TotalCount = result.Data.TotalCount;
+            ClearMessages();
+        }
+        else
+        {
+            ErrorMessage = result.Message;
+        }
+    }
+
+    private async Task DeleteTechStackAsync(string techStackId)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add("ContentText", "Are you sure you want to delete this Tech Stack?");
+        parameters.Add("ButtonText", "Delete");
+        parameters.Add("Color", MudBlazor.Color.Error);
+
+        var dialog = DialogService.Show<ConfirmationDialog>("Confirm Deletion", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && (bool)result.Data)
+        {
+            var deleteResult = await TechStackService.DeleteTechStackAsync(techStackId);
+            if (deleteResult.IsSuccess)
+            {
+                SuccessMessage = "Tech Stack deleted successfully.";
+                await LoadTechStacksAsync();
+            }
+            else
+            {
+                ErrorMessage = deleteResult.Message;
+            }
+        }
+    }
+
+    private async Task PageChanged(int pageNo)
+    {
+        Page = pageNo;
+        await LoadTechStacksAsync();
+        StateHasChanged();
+    }
+
+    private void ClearMessages()
+    {
+        ErrorMessage = "";
+        SuccessMessage = "";
+    }
+
+    private async Task OpenAddEditDialog(TechStackModel techStack = null)
+    {
+        var parameters = new DialogParameters();
+        if (techStack != null)
+        {
+            parameters.Add("TechStackToEdit", techStack);
+        }
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<TechStackDialog>("Add/Edit Tech Stack", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadTechStacksAsync();
+            if (result.Data != null)
+            {
+                if (techStack == null)
+                {
+                    SuccessMessage = "Tech Stack created successfully.";
+                }
+                else
+                {
+                    SuccessMessage = "Tech Stack updated successfully.";
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,215 @@
+@page "/users"
+@inject UserService UserService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudButton Variant="Variant.Filled" OnClick="OpenCreateUserDialog" Color="Color.Primary">Add New User</MudButton>
+<MudButton Variant="Variant.Filled" OnClick="OpenUploadUsersDialog" Color="Color.Success" Class="ml-2">Upload Users (Excel)</MudButton>
+
+<MudDataGrid @ref="_dataGrid"
+             Items="@Users"
+             ReadOnly="true"
+             EditMode="@DataGridEditMode.Cell"
+             Class="mt-4"
+             Dense="true"
+             Striped="true"
+             Hover="true">
+    <Columns>
+        <HierarchyColumn T="UserModel" EnableHeaderToggle="true" />
+
+        <TemplateColumn T="UserModel" Title="No." Sortable="false" Filterable="false">
+            <CellTemplate>
+                @(Users.IndexOf(context.Item) + 1 + (Page - 1) * PageSize)
+            </CellTemplate>
+        </TemplateColumn>
+
+        <PropertyColumn Property="x => x.UserName" Title="User Name" />
+        <PropertyColumn Property="x => x.GitHubAccountName" Title="GitHub Account" />
+        <PropertyColumn Property="x => x" Title="Actions" Sortable="false">
+            <CellTemplate>
+                <MudButtonGroup>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" OnClick="() => OpenEditUserDialog(context.Item)" Color="Color.Info" Size="Size.Small" Title="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteUserAsync(context.Item.UserId)" Color="Color.Error" Size="Size.Small" Title="Delete" />
+                </MudButtonGroup>
+            </CellTemplate>
+        </PropertyColumn>
+    </Columns>
+    <ChildRowContent>
+        <MudCard Elevation="0" Class="pa-2 ma-1" Style="border: 1px solid var(--mud-palette-lines-default)">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.body2"><strong>User Code:</strong> @context.Item.UserCode</MudText>
+                    <MudText Typo="Typo.body2"><strong>Email:</strong> @context.Item.Nrc</MudText>
+                    <MudText Typo="Typo.body2"><strong>Mobile No:</strong> @context.Item.MobileNo</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="8">
+                    <MudText Typo="Typo.body2"><strong>Tech Stacks:</strong></MudText>
+                    @if (context.Item.TechStacks != null && context.Item.TechStacks.Any())
+                    {
+                        <MudChipSet Class="mt-1">
+                            @foreach (var techStack in context.Item.TechStacks)
+                            {
+                                <MudChip Label="true" Size="Size.Small" Color="Color.Secondary">@techStack.TechStackName</MudChip>
+                            }
+                        </MudChipSet>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mt-1"><i>No tech stacks assigned.</i></MudText>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudCard>
+    </ChildRowContent>
+    <PagerContent>
+        <MudDataGridPager T="UserModel" />
+    </PagerContent>
+</MudDataGrid>
+
+<MudPagination Class="mt-4" Count="@(TotalCount / PageSize + (TotalCount % PageSize > 0 ? 1 : 0))"
+               Elevation="0"
+               BoundaryCount="2"
+               SelectedChanged="@PageChanged" />
+
+@code {
+    private List<UserModel> Users = new();
+    private int TotalCount = 0;
+    private int Page = 1;
+    private int PageSize = 5;
+
+    private MudDataGrid<UserModel>? _dataGrid;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsersAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        var result = await UserService.GetUsersAsync(Page, PageSize);
+        if (result.IsSuccess && result.Data != null)
+        {
+            Users = result.Data.Users.ToList();
+            TotalCount = result.Data.TotalCount;
+        }
+        else
+        {
+            Users = new List<UserModel>();
+            TotalCount = 0;
+            HandleError(result);
+        }
+        StateHasChanged();
+    }
+
+    private async Task PageChanged(int pageNo)
+    {
+        Page = pageNo;
+        await LoadUsersAsync();
+    }
+
+    private void HandleError<T>(Result<T> result)
+    {
+        if (result == null || string.IsNullOrEmpty(result.Message))
+        {
+            Snackbar.Add("An unexpected error occurred.", Severity.Error);
+            return;
+        }
+        switch (result.GetResultType())
+        {
+            case EnumResultType.ValidationError:
+                Snackbar.Add(result.Message, Severity.Warning);
+                break;
+            case EnumResultType.NotFoundError:
+                Snackbar.Add(result.Message, Severity.Info);
+                break;
+            default:
+                Snackbar.Add(result.Message, Severity.Error);
+                break;
+        }
+    }
+
+    private async Task OpenCreateUserDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<AddUserDialog>("Add New User", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadUsersAsync();
+        }
+    }
+
+    private async Task OpenEditUserDialog(UserModel user)
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+
+        var requestModel = new UserRequestModel
+        {
+            UserName = user.UserName,
+            GitHubAccountName = user.GitHubAccountName,
+            Nrc = user.Nrc,
+            MobileNo = user.MobileNo,
+            TechStackCodes = user.TechStacks?.Select(ts => ts.TechStackCode).ToList() ?? new List<string>()
+        };
+
+        var parameters = new DialogParameters<EditUserDialog>
+        {
+            { x => x.UserId, user.UserId },
+            { x => x.Request, requestModel }
+        };
+
+        var dialog = await DialogService.ShowAsync<EditUserDialog>("Edit User", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadUsersAsync();
+        }
+    }
+
+    private async Task DeleteUserAsync(string userId)
+    {
+        bool? confirmed = await DialogService.ShowMessageBox(
+            "Confirm Delete",
+            "Are you sure you want to delete this user?",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await UserService.DeleteUserAsync(userId);
+            if (result.IsSuccess && result.Data == true)
+            {
+                Snackbar.Add("User deleted successfully.", Severity.Success);
+                await LoadUsersAsync();
+            }
+            else
+            {
+                HandleError(result);
+            }
+        }
+    }
+
+    private async Task OpenUploadUsersDialog()
+    {
+        var dialog = await DialogService.ShowAsync<UploadUsersDialog>("Upload Users from Excel");
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is List<UserRequestModel> newUsers)
+        {
+            if (newUsers.Any())
+            {
+                var addResult = await UserService.AddUsersAsync(newUsers);
+                if (addResult.IsSuccess)
+                {
+                    Snackbar.Add($"{newUsers.Count} users uploaded successfully.", Severity.Success);
+                    await LoadUsersAsync();
+                }
+                else
+                {
+                    HandleError(addResult);
+                }
+            }
+        }
+    }
+}

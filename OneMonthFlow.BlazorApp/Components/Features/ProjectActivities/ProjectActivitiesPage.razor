@@ -1,0 +1,256 @@
+﻿@page "/projects/activity"
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ProjectTeamActivityService ProjectTeamActivityService
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5">Project Activities</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudGrid Spacing="2" Class="mb-4">
+            <MudItem xs="12" sm="5">
+                <MudAutocomplete T="TeamModel" Label="Filter by Team"
+                                 SearchFunc="SearchTeamsAsync" ToStringFunc="t => t?.TeamName"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                                 OnClearButtonClick="OnFilterTeamCleared" ValueChanged="OnFilterTeamChanged"
+                                 DebounceInterval="300" ShowProgressIndicator="true"
+                                 Placeholder="Search for a team..."/>
+            </MudItem>
+            <MudItem xs="12" sm="5">
+                <MudSelect T="string" Label="Filter by Project"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                           Disabled="@(_filterTeam == null || !_projectsForFilterTeam.Any())"
+                           OnClearButtonClick="OnFilterProjectCleared" ValueChanged="LoadActivitiesAsync">
+                    @if (_filterTeam != null)
+                    {
+                        foreach (var project in _projectsForFilterTeam)
+                        {
+                            <MudSelectItem Value="@project.ProjectCode">@project.ProjectName (@project.ProjectCode)</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="2" Class="d-flex align-center">
+                <MudIconButton Icon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => OpenActivityDialogAsync())" Size="Size.Large" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDataGrid T="ProjectTeamActivityModel" Items="@_activities" ReadOnly="false"
+                     Sortable="true" Filterable="false" Dense="true" Hover="true" Bordered="true"
+                     Loading="@_isLoading" Striped="true"
+                     QuickFilter="@_quickFilter" RowsPerPage="10">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">Activities</MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="_searchString" Placeholder="Search Activities..." Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0" Dense="true" Immediate="true"/>
+            </ToolBarContent>
+            <Columns>
+                <PropertyColumn Property="x => x.TeamName" Title="Team" Sortable="true" />
+                <PropertyColumn Property="x => x.ProjectName" Title="Project" Sortable="true" />
+                <PropertyColumn Property="x => x.ActivityDate" Title="Activity Date" Format="yyyy-MM-dd" Sortable="true" />
+                <PropertyColumn Property="x => x.Tasks" Title="Tasks">
+                    <CellTemplate>
+                        <MudTooltip Text="@context.Item.Tasks" MaxWidth="300">
+                            <MudText Typo="Typo.body2" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">
+                                @(context.Item.Tasks?.Length > 50 ? context.Item.Tasks.Substring(0, 50) + "..." : context.Item.Tasks)
+                            </MudText>
+                        </MudTooltip>
+                    </CellTemplate>
+                </PropertyColumn>
+                <TemplateColumn Title="Actions" StickyRight="true" Class="mud-table-cell-sticky-right">
+                    <CellTemplate>
+                        @* <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Title="Edit"
+                                       OnClick="@(() => OpenActivityDialogAsync(context.Item))" /> *@
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Title="Delete"
+                                       OnClick="@(() => ConfirmDeleteActivityAsync(context.Item))" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="ProjectTeamActivityModel" />
+            </PagerContent>
+            <NoRecordsContent>
+                <MudText>No activities found matching your criteria.</MudText>
+            </NoRecordsContent>
+            <LoadingContent>
+                <MudText>Loading activities...</MudText>
+            </LoadingContent>
+        </MudDataGrid>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private List<ProjectTeamActivityModel> _activities = new();
+    private bool _isLoading = true;
+    private string _searchString = string.Empty; // For DataGrid QuickFilter
+
+    // Filter related
+    private TeamModel? _filterTeam;
+    private List<ProjectModel> _projectsForFilterTeam = new();
+    private string? _filterProjectCode;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadActivitiesAsync();
+    }
+
+    private async Task LoadActivitiesAsync()
+    {
+        _isLoading = true;
+        StateHasChanged(); // Update UI to show loading state
+
+        var result = await ProjectTeamActivityService.GetActivitiesAsync(_filterTeam?.TeamCode, _filterProjectCode);
+        if (result.IsSuccess && result.Data != null)
+        {
+            _activities = result.Data;
+        }
+        else
+        {
+            _activities = new List<ProjectTeamActivityModel>(); // Clear on error or no data
+            Snackbar.Add(result.Message ?? "Failed to load activities.", Severity.Error);
+        }
+        _isLoading = false;
+        StateHasChanged(); // Update UI with data or empty state
+    }
+
+    private async Task<IEnumerable<TeamModel>> SearchTeamsAsync(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value) && value.Length < 2) // Don't search on empty or too short string
+             return Enumerable.Empty<TeamModel>();
+
+        var result = await ProjectTeamActivityService.SearchTeamsAsync(value);
+        return result.IsSuccess && result.Data != null ? result.Data : Enumerable.Empty<TeamModel>();
+    }
+
+    private async Task OnFilterTeamChanged(TeamModel? selectedTeam)
+    {
+        _filterTeam = selectedTeam;
+        _filterProjectCode = null; // Reset project filter
+        _projectsForFilterTeam.Clear();
+
+        if (_filterTeam != null && !string.IsNullOrEmpty(_filterTeam.TeamCode))
+        {
+            var projectResult = await ProjectTeamActivityService.GetProjectsByTeamCodeAsync(_filterTeam.TeamCode);
+            if (projectResult.IsSuccess && projectResult.Data != null)
+            {
+                _projectsForFilterTeam = projectResult.Data;
+            }
+            else
+            {
+                Snackbar.Add(projectResult.Message ?? $"Failed to load projects for team '{_filterTeam.TeamName}'.", Severity.Warning);
+            }
+        }
+        await LoadActivitiesAsync(); // Reload activities based on new team filter
+        StateHasChanged();
+    }
+    
+    private async Task OnFilterTeamCleared()
+    {
+        _filterTeam = null;
+        _filterProjectCode = null;
+        _projectsForFilterTeam.Clear();
+        await LoadActivitiesAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnFilterProjectCleared()
+    {
+        _filterProjectCode = null;
+        await LoadActivitiesAsync();
+        StateHasChanged();
+    }
+
+    private Func<ProjectTeamActivityModel, bool> _quickFilter => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+        if (x.TeamName?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        if (x.ProjectName?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        if (x.Tasks?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        if (x.ActivityDate?.ToString("yyyy-MM-dd").Contains(_searchString) == true)
+            return true;
+        return false;
+    };
+
+    private async Task OpenActivityDialogAsync(ProjectTeamActivityModel? activity = null)
+    {
+        var parameters = new DialogParameters<ProjectActivityDialog>();
+        string dialogTitle;
+
+        if (activity == null) // Adding new
+        {
+            dialogTitle = "Add New Project Activity";
+            var newActivity = new ProjectTeamActivityModel
+            {
+                // Pre-fill from filters if they are set
+                TeamCode = _filterTeam?.TeamCode ?? string.Empty,
+                ProjectCode = (!string.IsNullOrEmpty(_filterTeam?.TeamCode) && !string.IsNullOrEmpty(_filterProjectCode)) ? _filterProjectCode : string.Empty,
+                ActivityDate = DateTime.Today // Default to today
+            };
+            parameters.Add(p => p.ActivityModel, newActivity);
+            parameters.Add(p => p.IsEditMode, false);
+        }
+        else // Editing existing
+        {
+            dialogTitle = $"Edit Activity for {activity.ProjectName} on {activity.ActivityDate:yyyy-MM-dd}";
+            // Clone the activity to avoid direct modification of the grid's item if dialog is cancelled
+            var activityToEdit = new ProjectTeamActivityModel
+            {
+                ProjectTeamActivityId = activity.ProjectTeamActivityId,
+                TeamCode = activity.TeamCode,
+                ProjectCode = activity.ProjectCode,
+                ActivityDate = activity.ActivityDate,
+                Tasks = activity.Tasks,
+                TeamName = activity.TeamName, // Pass for display if needed in dialog title or readonly fields
+                ProjectName = activity.ProjectName
+            };
+            parameters.Add(p => p.ActivityModel, activityToEdit);
+            parameters.Add(p => p.IsEditMode, true);
+        }
+        
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ProjectActivityDialog>(dialogTitle, parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is ProjectTeamActivityModel savedActivity)
+        {
+            await LoadActivitiesAsync(); // Refresh grid
+            Snackbar.Add(activity == null ? "Activity added successfully." : "Activity updated successfully.", Severity.Success);
+        }
+    }
+
+    private async Task ConfirmDeleteActivityAsync(ProjectTeamActivityModel activity)
+    {
+        var parameters = new DialogParameters
+        {
+            { "ContentText", $"Are you sure you want to delete the activity for '{activity.ProjectName}' on {activity.ActivityDate:yyyy-MM-dd}?" },
+            { "ButtonText", "Delete" },
+            { "Color", Color.Error }
+        };
+        // Assuming you have a generic ConfirmationDialog component
+        // Replace 'ConfirmationDialog' with your actual component name if different
+        var dialog = await DialogService.ShowAsync<ConfirmationDialog>("Confirm Deletion", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is bool confirmed && confirmed)
+        {
+            var deleteResult = await ProjectTeamActivityService.DeleteActivityAsync(activity.ProjectTeamActivityId!);
+            if (deleteResult.IsSuccess)
+            {
+                Snackbar.Add("Activity deleted successfully.", Severity.Success);
+                await LoadActivitiesAsync(); // Refresh grid
+            }
+            else
+            {
+                Snackbar.Add(deleteResult.Message ?? "Failed to delete activity.", Severity.Error);
+            }
+        }
+    }
+}

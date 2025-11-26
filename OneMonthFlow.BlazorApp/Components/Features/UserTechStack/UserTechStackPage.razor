@@ -1,0 +1,242 @@
+﻿@page "/users/tech-stacks"
+@using OneMonthFlow.Domain.Shared
+@inject UserTechStackService UserTechStackService
+@inject UserService UserService
+@inject TechStackService TechStackService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h6">@(_editingUserTechStack == null ? "Add New User Tech Stack" : "Edit User Tech Stack")</MudText>
+
+<MudForm @ref="_form" Validated="OnValidated" Immediate="true">
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                @* <MudSelect T="string" Label="User"
+                                  @bind-Value="_userTechStackModel.UserCode"
+                                  Required="true"
+                                  Variant="Variant.Filled"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true"
+                                  Placeholder="Select a user">
+                    @foreach (var user in Users)
+                    {
+                        <MudSelectItem Value="@user.UserCode">@user.UserName (@user.UserCode)</MudSelectItem>
+                    }
+                </MudSelect> *@
+                <MudAutocomplete T="string"
+                                 Label="GitHub Account"
+                                 Placeholder="Search GitHub account"
+                                 @bind-Value="_userTechStackModel.UserCode"
+                                 SearchFunc="SearchGitHubUsers"
+                                 Variant="Variant.Filled"
+                                 Margin="Margin.Dense"
+                                 ShowProgressIndicator="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudSelect T="string" Label="Tech Stack"
+                           @bind-Value="_userTechStackModel.TechStackCode"
+                           Required="true"
+                           Variant="Variant.Filled"
+                           Margin="Margin.Dense"
+                           Clearable="true"
+                           Dense="true"
+                           Placeholder="Select a tech stack">
+                    @foreach (var tech in TechStacks)
+                    {
+                        <MudSelectItem Value="@tech.TechStackCode">@tech.TechStackName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudNumericField T="int" Label="Proficiency Level"
+                                 @bind-Value="_userTechStackModel.ProficiencyLevel"
+                                 Min="1" Max="10" Required="true" />
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+    <MudButton Disabled="!_form.IsValid" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveUserTechStackAsync" Class="mt-3">
+        @(_editingUserTechStack == null ? "Create" : "Update")
+    </MudButton>
+    @if (_editingUserTechStack != null)
+    {
+        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelEdit" Class="mt-3 ml-2">Cancel</MudButton>
+    }
+</MudForm>
+
+<MudDataGrid @ref="_dataGrid"
+             Items="@UserTechStacks"
+             ReadOnly="true"
+             Class="mt-4">
+    <Columns>
+        <PropertyColumn Property="x => x.UserCode" Title="User Code" />
+        <PropertyColumn Property="x => x.UserName" Title="User Name" />
+        <PropertyColumn Property="x => x.TechStackName" Title="Tech Stack" />
+        <PropertyColumn Property="x => x.ProficiencyLevel" Title="Level" />
+        <PropertyColumn Property="x => x" Title="Actions">
+            <CellTemplate>
+                <MudButton Color="Color.Info" Size="Size.Small" OnClick="() => EditUserTechStack(context.Item)">Edit</MudButton>
+                <MudButton Color="Color.Error" Size="Size.Small" OnClick="() => DeleteUserTechStackAsync(context.Item.UserTechStackId)">Delete</MudButton>
+            </CellTemplate>
+        </PropertyColumn>
+    </Columns>
+</MudDataGrid>
+
+<MudPagination Class="mt-4"
+               Count="@(TotalCount / PageSize + (TotalCount % PageSize > 0 ? 1 : 0))"
+               SelectedChanged="PageChanged" />
+
+@code {
+    private MudDataGrid<UserTechStackModel>? _dataGrid;
+    private MudForm? _form;
+
+    private List<UserTechStackModel> UserTechStacks = new();
+    private List<UserModel> Users = new();
+    private List<TechStackModel> TechStacks = new();
+
+    private int Page = 1;
+    private int PageSize = 10;
+    private int TotalCount;
+
+    private UserTechStackRequestModel _userTechStackModel = new();
+    private UserTechStackModel? _editingUserTechStack = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLookupsAsync();
+        await LoadUserTechStacksAsync();
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        var userResult = await UserService.GetUsersAsync(1, 1000); // Load all or paginated as needed
+        if (userResult.IsSuccess)
+            Users = userResult.Data.Users.ToList();
+
+        var techResult = await TechStackService.GetTechStacksAsync(); // Assume you have this service method
+        if (techResult.IsSuccess)
+            TechStacks = techResult.Data.TechStacks;
+    }
+
+    private async Task LoadUserTechStacksAsync()
+    {
+        var result = await UserTechStackService.GetAllUserTechStacksAsync(Page, PageSize, null, null);
+        if (result.IsSuccess)
+        {
+            UserTechStacks = result.Data.UserTechStacks.ToList();
+            TotalCount = result.Data.TotalCount;
+        }
+        else
+        {
+            HandleError(result);
+        }
+    }
+
+    private void EditUserTechStack(UserTechStackModel item)
+    {
+        _editingUserTechStack = item;
+        _userTechStackModel = new UserTechStackRequestModel
+        {
+            UserTechStackId = item.UserTechStackId,
+            UserCode = item.UserCode,
+            TechStackCode = item.TechStackCode,
+            ProficiencyLevel = item.ProficiencyLevel
+        };
+    }
+
+    private async Task CancelEdit()
+    {
+        _editingUserTechStack = null;
+        _userTechStackModel = new UserTechStackRequestModel();
+        await _form.ResetAsync();
+    }
+
+    private async Task SaveUserTechStackAsync()
+    {
+        if (_editingUserTechStack == null)
+        {
+            // Create
+            var createResult = await UserTechStackService.AddUserTechStackAsync(_userTechStackModel);
+            if (createResult.IsSuccess)
+            {
+                Snackbar.Add("User tech stack created successfully.", Severity.Success);
+                await LoadUserTechStacksAsync();
+                CancelEdit();
+            }
+            else
+            {
+                HandleError(createResult);
+            }
+        }
+        else
+        {
+            // Update
+            var updateResult = await UserTechStackService.UpdateUserTechStackAsync(_userTechStackModel);
+            if (updateResult.IsSuccess)
+            {
+                Snackbar.Add("User tech stack updated successfully.", Severity.Success);
+                await LoadUserTechStacksAsync();
+                CancelEdit();
+            }
+            else
+            {
+                HandleError(updateResult);
+            }
+        }
+    }
+
+    private async Task DeleteUserTechStackAsync(string id)
+    {
+        var result = await UserTechStackService.RemoveUserTechStackAsync(id);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Tech stack removed.", Severity.Success);
+            await LoadUserTechStacksAsync();
+        }
+        else
+        {
+            HandleError(result);
+        }
+    }
+
+    private async Task PageChanged(int newPage)
+    {
+        Page = newPage;
+        await LoadUserTechStacksAsync();
+        StateHasChanged();
+    }
+
+    private void HandleError<T>(Result<T> result)
+    {
+        switch (result.GetResultType())
+        {
+            case EnumResultType.ValidationError:
+                Snackbar.Add(result.Message, Severity.Warning);
+                break;
+            case EnumResultType.NotFoundError:
+                Snackbar.Add(result.Message, Severity.Info);
+                break;
+            default:
+                Snackbar.Add(result.Message, Severity.Error);
+                break;
+        }
+    }
+
+    private void OnValidated()
+    {
+        StateHasChanged();
+    }
+
+    private async Task<IEnumerable<string>> SearchGitHubUsers(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<string>();
+
+        var result = await UserTechStackService.SearchByGitHubAccountAsync(value);
+
+        if (result.IsSuccess)
+            return result.Data!.Users.Select(u => u.UserName).Distinct();
+
+        return Array.Empty<string>();
+    }
+}

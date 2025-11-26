@@ -1,0 +1,166 @@
+﻿@using OneMonthFlow.Domain.Shared
+@inject ProjectService ProjectService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.ListAlt" Class="mr-2" /> Project List
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudDataGrid T="ProjectModel"
+                     Items="@_projects"
+                     TotalItems="@_totalItems"
+                     Dense="true"
+                     Striped="true"
+                     Bordered="true"
+                     Filterable="true"
+                     Sortable="true"
+                     PageSizeOptions="@(new int[] { 5, 10, 20, 50 })"
+                     @ref="_dataGrid"
+                     Loading="_isLoading">
+            <Columns>
+                <TemplateColumn T="ProjectModel" Title="No." Sortable="false" Filterable="false">
+                    <CellTemplate>
+                        @(_projects.IndexOf(context.Item) + 1 + (_currentPage - 1) * _pageSize)
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn Property="x => x.ProjectCode" Title="Code" Sortable="true" Filterable="true" />
+                <PropertyColumn Property="x => x.ProjectName" Title="Name" Sortable="true" Filterable="true" />
+                <PropertyColumn Property="x => x.Status" Title="Status" Sortable="true" Filterable="true">
+                    <CellTemplate>
+                        @if (!string.IsNullOrEmpty(context.Item.Status))
+                        {
+                            <MudChip Label="true" Size="Size.Small" Color="@GetStatusColor(context.Item.Status)">@context.Item.Status</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip Label="true" Size="Size.Small" Color="Color.Dark">N/A</MudChip>
+                        }
+                    </CellTemplate>
+                </PropertyColumn>
+                <PropertyColumn Property="x => x.StartDate" Title="Start Date" Format="yyyy-MM-dd" Sortable="true" Filterable="false" />
+                <PropertyColumn Property="x => x.EndDate" Title="End Date" Format="yyyy-MM-dd" Sortable="true" Filterable="false" />
+                <TemplateColumn Title="Actions" StickyRight="true">
+                    <CellTemplate>
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Title="View Details (Opens in Main Page)" OnClick="@(() => SelectAndClose(context.Item))" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="ProjectModel"
+                                  PageSizeOptions="@(new int[] { 5, 10, 20, 50 })"
+                                  PageChanged="OnPageChangedAsync"
+                                  PageSizeChanged="OnPageSizeChangedAsync"
+                                  PageIndex="@(_currentPage - 1)" />
+            </PagerContent>
+        </MudDataGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Color="Color.Secondary" Variant="Variant.Text">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private MudDataGrid<ProjectModel>? _dataGrid;
+    private bool _isLoading = true;
+
+    private List<ProjectModel> _projects = new List<ProjectModel>();
+    private int _totalItems = 0;
+    private int _currentPage = 1;
+    private int _pageSize = 10;
+    private string? _currentSortBy = null;
+    private bool _currentSortDescending = false;
+    private string? _currentFilterTerm = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProjectsAsync();
+    }
+
+    private async Task LoadProjectsAsync()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        var serviceResponse = await ProjectService.GetProjectsWithPaginationAsync(
+            _currentPage,
+            _pageSize,
+            _currentSortBy,
+            _currentSortDescending,
+            _currentFilterTerm
+        );
+
+        if (serviceResponse.IsSuccess && serviceResponse.Data != null)
+        {
+            _projects = serviceResponse.Data.Projects;
+            _totalItems = serviceResponse.Data.TotalCount;
+        }
+        else
+        {
+            Snackbar.Add(serviceResponse.Message ?? "Failed to load projects.", Severity.Error);
+            _projects = new List<ProjectModel>();
+            _totalItems = 0;
+        }
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task OnPageChangedAsync(int newPageIndex)
+    {
+        _currentPage = newPageIndex + 1;
+        await LoadProjectsAsync();
+    }
+
+    private async Task OnPageSizeChangedAsync(int newPageSize)
+    {
+        _pageSize = newPageSize;
+        _currentPage = 1;
+        await LoadProjectsAsync();
+    }
+
+    private Color GetStatusColor(string? status)
+    {
+        if (string.IsNullOrEmpty(status))
+        {
+            return Color.Dark;
+        }
+
+        if (Enum.TryParse<ProjectStatus>(status.Replace(" ", ""), out var projectStatus))
+        {
+            return projectStatus switch
+            {
+                ProjectStatus.NotStarted => Color.Default,
+                ProjectStatus.InProgress => Color.Info,
+                ProjectStatus.OnHold => Color.Warning,
+                ProjectStatus.Completed => Color.Success,
+                ProjectStatus.Cancelled => Color.Error,
+                _ => Color.Dark
+            };
+        }
+        else
+        {
+            return Color.Dark;
+        }
+    }
+
+    void Cancel() => MudDialog.Cancel();
+
+    void SelectAndClose(ProjectModel project)
+    {
+        MudDialog.Close(DialogResult.Ok(project));
+    }
+
+    private enum ProjectStatus
+    {
+        NotStarted,
+        InProgress,
+        OnHold,
+        Completed,
+        Cancelled
+    }
+}

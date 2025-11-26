@@ -1,0 +1,304 @@
+﻿@inject ISnackbar Snackbar
+@inject ProjectTeamActivityService ProjectTeamActivityService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(IsEditMode? Icons.Material.Filled.Edit : Icons.Material.Filled.Add)" Class="mr-2" />
+            @(IsEditMode ? "Edit Project Activity" : "Add New Project Activity")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_formValid" Class="mt-4">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudAutocomplete T="UserModel" Label="User"
+                                     @bind-Value="BoundSelectedUser" SearchFunc="SearchUsersDialogAsync"
+                                     ToStringFunc="u => u?.UserName" Variant="Variant.Outlined"
+                                     Required="true" RequiredError="User is required."
+                                     Disabled="IsEditMode || _isLoadingUser" DebounceInterval="300"
+                                     ResetValueOnEmptyText="true" CoerceValue="true" ShowProgressIndicator="true"
+                                     Placeholder="Search and select a user..." />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudAutocomplete T="TechStackModel" Label="Tech Stack"
+                                     @bind-Value="BoundSelectedTechStack" SearchFunc="SearchTechStacksDialogAsync"
+                                     ToStringFunc="ts => ts?.TechStackName" Variant="Variant.Outlined"
+                                     Required="true" RequiredError="Tech Stack is required."
+                                     Disabled="IsEditMode || _isLoadingTechStack" DebounceInterval="300"
+                                     ResetValueOnEmptyText="true" CoerceValue="true" ShowProgressIndicator="true"
+                                     Placeholder="Search and select a tech stack..." />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudAutocomplete T="TeamModel" Label="Team"
+                                     @bind-Value="BoundSelectedTeam" SearchFunc="SearchTeamsDialogAsync"
+                                     ToStringFunc="t => t?.TeamName" Variant="Variant.Outlined"
+                                     Required="true" RequiredError="Team is required."
+                                     Disabled="IsEditMode" DebounceInterval="300"
+                                     ResetValueOnEmptyText="true" CoerceValue="true" ShowProgressIndicator="true"
+                                     Placeholder="Search and select a team..." />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="string" Label="Project" For="@(() => ActivityModel.ProjectCode)"
+                               @bind-Value="ActivityModel.ProjectCode" Variant="Variant.Outlined"
+                               Required="true" RequiredError="Project is required."
+                               Disabled="IsEditMode || _selectedTeam == null || !_projectsForDialogTeam.Any() || _isLoadingProjects">
+                        @if (_selectedTeam != null && _projectsForDialogTeam.Any())
+                        {
+                            foreach (var project in _projectsForDialogTeam)
+                            {
+                                <MudSelectItem Value="@project.ProjectCode">@project.ProjectName (@project.ProjectCode)</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                    @if (_selectedTeam != null && !_projectsForDialogTeam.Any() && !_isLoadingProjects)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Warning" Class="mt-1">No projects found for the selected team.</MudText>
+                    }
+                    @if (_isLoadingProjects)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-1" />
+                    }
+                </MudItem>
+                <MudItem xs="12">
+                    <MudDatePicker Label="Activity Date" For="@(() => ActivityModel.ActivityDate)"
+                                   @bind-Date="ActivityModel.ActivityDate" Variant="Variant.Outlined"
+                                   Required="true" RequiredError="Activity date is required."
+                                   PickerVariant="PickerVariant.Dialog" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField Label="Tasks" For="@(() => ActivityModel.Tasks)"
+                                  @bind-Value="ActivityModel.Tasks" Variant="Variant.Outlined"
+                                  Lines="5" MaxLines="10" Required="true" RequiredError="Tasks are required." />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAsync" Disabled="@(!_formValid || _isSaving)">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>Save Activity</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public ProjectTeamActivityModel ActivityModel { get; set; } = new();
+    [Parameter] public bool IsEditMode { get; set; }
+
+    private MudForm? _form;
+    private bool _formValid;
+    private bool _isSaving = false;
+    private bool _isLoadingProjects = false;
+    private bool _isLoadingUser = false;
+    private bool _isLoadingTechStack = false;
+
+    private TeamModel? _selectedTeam;
+    private List<ProjectModel> _projectsForDialogTeam = new();
+    private UserModel? _selectedUser;
+    private TechStackModel? _selectedTechStack;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsEditMode)
+        {
+            if (!string.IsNullOrEmpty(ActivityModel.UserCode))
+            {
+                _isLoadingUser = true;
+                var userResult = await ProjectTeamActivityService.GetUserByCodeAsync(ActivityModel.UserCode);
+                if (userResult.IsSuccess && userResult.Data != null)
+                {
+                    BoundSelectedUser = userResult.Data;
+                }
+                else
+                {
+                    Snackbar.Add($"Could not load initial user: {ActivityModel.UserCode} - {userResult.Message}", Severity.Warning);
+                }
+                _isLoadingUser = false;
+            }
+
+            if (!string.IsNullOrEmpty(ActivityModel.TechStackCode))
+            {
+                _isLoadingTechStack = true;
+                var techStackResult = await ProjectTeamActivityService.GetTechStackByCodeAsync(ActivityModel.TechStackCode);
+                if (techStackResult.IsSuccess && techStackResult.Data != null)
+                {
+                    BoundSelectedTechStack = techStackResult.Data;
+                }
+                else
+                {
+                    Snackbar.Add($"Could not load initial tech stack: {ActivityModel.TechStackCode} - {techStackResult.Message}", Severity.Warning);
+                }
+                _isLoadingTechStack = false;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(ActivityModel.TeamCode))
+        {
+            var teamResult = await ProjectTeamActivityService.GetTeamByCodeAsync(ActivityModel.TeamCode);
+            if (teamResult.IsSuccess && teamResult.Data != null)
+            {
+                BoundSelectedTeam = teamResult.Data;
+            }
+            else if (!string.IsNullOrEmpty(ActivityModel.TeamCode))
+            {
+                Snackbar.Add($"Could not load initial team: {ActivityModel.TeamCode} - {teamResult.Message}", Severity.Warning);
+            }
+        }
+    }
+
+    private TeamModel? BoundSelectedTeam
+    {
+        get => _selectedTeam;
+        set
+        {
+            if (_selectedTeam?.TeamCode != value?.TeamCode)
+            {
+                _selectedTeam = value;
+                ActivityModel.TeamCode = _selectedTeam?.TeamCode ?? string.Empty;
+                ActivityModel.ProjectCode = string.Empty;
+                _projectsForDialogTeam.Clear();
+                if (_selectedTeam != null)
+                {
+                    InvokeAsync(LoadProjectsForSelectedTeamAsync);
+                }
+                else
+                {
+                    StateHasChanged();
+                }
+            }
+        }
+    }
+
+    private UserModel? BoundSelectedUser
+    {
+        get => _selectedUser;
+        set
+        {
+            if (_selectedUser?.UserCode != value?.UserCode)
+            {
+                _selectedUser = value;
+                ActivityModel.UserCode = _selectedUser?.UserCode ?? string.Empty;
+            }
+        }
+    }
+
+    private TechStackModel? BoundSelectedTechStack
+    {
+        get => _selectedTechStack;
+        set
+        {
+            if (_selectedTechStack?.TechStackCode != value?.TechStackCode)
+            {
+                _selectedTechStack = value;
+                ActivityModel.TechStackCode = _selectedTechStack?.TechStackCode ?? string.Empty;
+            }
+        }
+    }
+
+    private async Task LoadProjectsForSelectedTeamAsync()
+    {
+        if (_selectedTeam == null || string.IsNullOrEmpty(_selectedTeam.TeamCode))
+        {
+            _projectsForDialogTeam.Clear();
+            ActivityModel.ProjectCode = string.Empty;
+            StateHasChanged();
+            return;
+        }
+
+        _isLoadingProjects = true;
+        StateHasChanged();
+
+        var projectResult = await ProjectTeamActivityService.GetProjectsByTeamCodeAsync(_selectedTeam.TeamCode);
+        if (projectResult.IsSuccess && projectResult.Data != null)
+        {
+            _projectsForDialogTeam = projectResult.Data;
+            if (IsEditMode && !string.IsNullOrEmpty(ActivityModel.ProjectCode) && !_projectsForDialogTeam.Any(p => p.ProjectCode == ActivityModel.ProjectCode))
+            {
+                Snackbar.Add($"Previously selected project '{ActivityModel.ProjectCode}' is not available for team '{_selectedTeam.TeamName}'. Please re-select.", Severity.Info);
+                ActivityModel.ProjectCode = string.Empty;
+            }
+        }
+        else
+        {
+            _projectsForDialogTeam.Clear();
+            ActivityModel.ProjectCode = string.Empty;
+            Snackbar.Add(projectResult.Message ?? $"Failed to load projects for team '{_selectedTeam.TeamName}'.", Severity.Warning);
+        }
+        _isLoadingProjects = false;
+        StateHasChanged();
+    }
+
+    private async Task<IEnumerable<TeamModel>> SearchTeamsDialogAsync(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value) && value.Length < 1)
+            return Enumerable.Empty<TeamModel>();
+        var result = await ProjectTeamActivityService.SearchTeamsAsync(value);
+        return result.IsSuccess && result.Data != null ? result.Data : Enumerable.Empty<TeamModel>();
+    }
+
+    private async Task<IEnumerable<UserModel>> SearchUsersDialogAsync(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value) && value.Length < 1)
+            return Enumerable.Empty<UserModel>();
+        var result = await ProjectTeamActivityService.SearchUsersAsync(value);
+        return result.IsSuccess && result.Data != null ? result.Data : Enumerable.Empty<UserModel>();
+    }
+
+    private async Task<IEnumerable<TechStackModel>> SearchTechStacksDialogAsync(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value) && value.Length < 1)
+            return Enumerable.Empty<TechStackModel>();
+        var result = await ProjectTeamActivityService.SearchTechStacksAsync(value);
+        return result.IsSuccess && result.Data != null ? result.Data : Enumerable.Empty<TechStackModel>();
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_form == null) return;
+        await _form.Validate();
+        if (!_formValid)
+        {
+            Snackbar.Add("Please correct validation errors.", Severity.Warning);
+            return;
+        }
+
+        _isSaving = true;
+        StateHasChanged();
+
+        Result<ProjectTeamActivityModel> result;
+        if (IsEditMode)
+        {
+            result = await ProjectTeamActivityService.UpdateActivityAsync(ActivityModel);
+        }
+        else
+        {
+            result = await ProjectTeamActivityService.AddActivityAsync(ActivityModel);
+        }
+
+        _isSaving = false;
+        StateHasChanged();
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add(result.Message ?? (IsEditMode ? "Activity updated successfully." : "Activity added successfully."), Severity.Success);
+            MudDialog.Close(DialogResult.Ok(result.Data));
+        }
+        else
+        {
+            Snackbar.Add(result.Message ?? "An error occurred while saving the activity.", Severity.Error);
+        }
+    }
+
+    void Cancel() => MudDialog.Cancel();
+}
