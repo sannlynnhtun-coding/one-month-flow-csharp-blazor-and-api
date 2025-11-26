@@ -22,8 +22,7 @@ public static class DashboardQueries
             WHERE EndDate <= @CutoffDate;";
 
     public const string GetLatestActivities = @"
-            SELECT ProjectTeamActivityId, ProjectCode, TeamCode, ActivityDate, Tasks
+            SELECT TOP (@Count) ProjectTeamActivityId, ProjectCode, TeamCode, ActivityDate, Tasks
             FROM Tbl_ProjectTeamActivity
-            ORDER BY ActivityDate DESC
-            LIMIT @Count;"; 
+            ORDER BY ActivityDate DESC;"; 
 }
