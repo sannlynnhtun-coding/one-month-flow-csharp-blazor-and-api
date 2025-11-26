@@ -5,7 +5,7 @@
 @inject TechStackService TechStackService
 @inject ISnackbar Snackbar
 
-<MudText Typo="Typo.h6">@(_editingUserTechStack == null ? "Add New User Tech Stack" : "Edit User Tech Stack")</MudText>
+<MudText Typo="Typo.h6" Class="mb-4">@(_editingUserTechStack == null ? "Add New User Tech Stack" : "Edit User Tech Stack")</MudText>
 
 <MudForm @ref="_form" Validated="OnValidated" Immediate="true">
     <MudPaper Class="pa-4 mb-4" Elevation="1">
@@ -64,6 +64,25 @@
     }
 </MudForm>
 
+<MudGrid Spacing="2" Class="mt-4 mb-4">
+    <MudItem xs="12" sm="6" md="4">
+        <MudTextField @bind-Value="FilterValue" 
+                     Label="Filter User Tech Stacks" 
+                     Placeholder="Search by user name, code, or tech stack"
+                     Variant="Variant.Outlined" 
+                     Adornment="Adornment.End" 
+                     AdornmentIcon="@Icons.Material.Filled.Search"
+                     Immediate="true"
+                     OnKeyDown="@(async (e) => { if (e.Key == "Enter") await ApplyFilter(); })" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="8" Class="d-flex align-center">
+        @if (!string.IsNullOrWhiteSpace(FilterValue))
+        {
+            <MudButton Variant="Variant.Text" OnClick="ClearFilter" Color="Color.Default" StartIcon="@Icons.Material.Filled.Clear">Clear Filter</MudButton>
+        }
+    </MudItem>
+</MudGrid>
+
 <MudDataGrid @ref="_dataGrid"
              Items="@UserTechStacks"
              ReadOnly="true"
@@ -97,6 +116,7 @@
     private int Page = 1;
     private int PageSize = 10;
     private int TotalCount;
+    private string FilterValue = string.Empty;
 
     private UserTechStackRequestModel _userTechStackModel = new();
     private UserTechStackModel? _editingUserTechStack = null;
@@ -120,7 +140,7 @@
 
     private async Task LoadUserTechStacksAsync()
     {
-        var result = await UserTechStackService.GetAllUserTechStacksAsync(Page, PageSize, null, null);
+        var result = await UserTechStackService.GetAllUserTechStacksAsync(Page, PageSize, null, FilterValue);
         if (result.IsSuccess)
         {
             UserTechStacks = result.Data.UserTechStacks.ToList();
@@ -130,6 +150,21 @@
         {
             HandleError(result);
         }
+    }
+
+    private async Task ApplyFilter()
+    {
+        Page = 1;
+        await LoadUserTechStacksAsync();
+        StateHasChanged();
+    }
+
+    private async Task ClearFilter()
+    {
+        FilterValue = string.Empty;
+        Page = 1;
+        await LoadUserTechStacksAsync();
+        StateHasChanged();
     }
 
     private void EditUserTechStack(UserTechStackModel item)

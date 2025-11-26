@@ -81,18 +81,19 @@ public class UserTechStackService
             }
 
             var offset = (page - 1) * pageSize;
+            var filterParam = string.IsNullOrWhiteSpace(filterValue) ? null : $"%{filterValue}%";
             var parameters = new
             {
                 PageSize = pageSize,
                 Offset = offset,
-                FilterValue = $"%{filterValue}%"
+                FilterValue = filterParam
             };
 
             var techStacks = await _sqlService.QueryAsync<UserTechStackModel>(
                 UserTechStackQueries.GetUserTechStacksPaginated, parameters);
 
             var totalCount = await _sqlService.QuerySingleAsync<int>(
-                UserTechStackQueries.GetUserTechStackCount, new { FilterValue = $"%{filterValue}%" });
+                UserTechStackQueries.GetUserTechStackCount, new { FilterValue = filterParam });
 
             var response = new UserTechStackResponseModel
             {

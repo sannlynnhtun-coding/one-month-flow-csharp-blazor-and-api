@@ -140,12 +140,12 @@ public class UserService
         try
         {
             var offset = (page - 1) * pageSize;
-            var parameters = new { PageSize = pageSize, Offset = offset };
-            // Add filterColumn and filterValue to parameters if implementing filtering
+            var filterParam = string.IsNullOrWhiteSpace(filterValue) ? null : $"%{filterValue}%";
+            var parameters = new { PageSize = pageSize, Offset = offset, FilterValue = filterParam };
 
             var usersData = await _sqlService.QueryAsync<UserModel>(UserQueries.GetUsersPaginated, parameters);
             var users = usersData.ToList();
-            var totalCount = await _sqlService.QuerySingleAsync<int>(UserQueries.GetUserCount);
+            var totalCount = await _sqlService.QuerySingleAsync<int>(UserQueries.GetUserCount, new { FilterValue = filterParam });
 
             foreach (var user in users)
             {

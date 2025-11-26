@@ -5,7 +5,25 @@
 
 <MudText Typo="Typo.h5" Class="mb-4">Tech Stacks</MudText>
 
-<MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => OpenAddEditDialog()">Add New Tech Stack</MudButton>
+<MudGrid Spacing="2" Class="mb-4">
+    <MudItem xs="12" sm="6" md="4">
+        <MudTextField @bind-Value="FilterValue" 
+                     Label="Filter Tech Stacks" 
+                     Placeholder="Search by name or code"
+                     Variant="Variant.Outlined" 
+                     Adornment="Adornment.End" 
+                     AdornmentIcon="@Icons.Material.Filled.Search"
+                     Immediate="true"
+                     OnKeyDown="@(async (e) => { if (e.Key == "Enter") await ApplyFilter(); })" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="8" Class="d-flex align-center">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => OpenAddEditDialog()" StartIcon="@Icons.Material.Filled.Add">Add New Tech Stack</MudButton>
+        @if (!string.IsNullOrWhiteSpace(FilterValue))
+        {
+            <MudButton Variant="Variant.Text" OnClick="ClearFilter" Color="Color.Default" StartIcon="@Icons.Material.Filled.Clear" Class="ml-2">Clear Filter</MudButton>
+        }
+    </MudItem>
+</MudGrid>
 
 <MudTable Items="TechStacks" Hover="true" Striped="true" Class="mt-4">
     <HeaderContent>
@@ -40,6 +58,7 @@
     private int Page = 1;
     private int PageSize = 10;
     private int TotalCount = 0;
+    private string FilterValue = string.Empty;
     private string ErrorMessage;
     private string SuccessMessage;
 
@@ -50,7 +69,7 @@
 
     private async Task LoadTechStacksAsync()
     {
-        var result = await TechStackService.GetTechStacksAsync(Page, PageSize, filterValue: "");
+        var result = await TechStackService.GetTechStacksAsync(Page, PageSize, filterValue: FilterValue);
         if (result.IsSuccess)
         {
             TechStacks = result.Data.TechStacks;
@@ -61,6 +80,21 @@
         {
             ErrorMessage = result.Message;
         }
+    }
+
+    private async Task ApplyFilter()
+    {
+        Page = 1;
+        await LoadTechStacksAsync();
+        StateHasChanged();
+    }
+
+    private async Task ClearFilter()
+    {
+        FilterValue = string.Empty;
+        Page = 1;
+        await LoadTechStacksAsync();
+        StateHasChanged();
     }
 
     private async Task DeleteTechStackAsync(string techStackId)

@@ -12,13 +12,13 @@ public static class TeamQueries
 
     public const string GetTeamsPaginated = @"
         SELECT * FROM Tbl_Team
-        WHERE TeamName LIKE @FilterValue OR TeamCode LIKE @FilterValue
+        WHERE (@FilterValue = '%' OR TeamName LIKE @FilterValue OR TeamCode LIKE @FilterValue)
         ORDER BY TeamName
         OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;";
 
     public const string GetTeamCount = @"
         SELECT COUNT(*) FROM Tbl_Team
-        WHERE TeamName LIKE @FilterValue OR TeamCode LIKE @FilterValue;";
+        WHERE (@FilterValue = '%' OR TeamName LIKE @FilterValue OR TeamCode LIKE @FilterValue);";
 
     public const string UpdateTeam = @"
         UPDATE Tbl_Team SET TeamName = @TeamName WHERE TeamId = @TeamId;";

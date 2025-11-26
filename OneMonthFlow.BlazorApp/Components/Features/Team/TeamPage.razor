@@ -5,7 +5,25 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
-<MudButton Variant="Variant.Filled" OnClick="OpenCreateTeamDialog" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Add New Team</MudButton>
+<MudGrid Spacing="2" Class="mb-4">
+    <MudItem xs="12" sm="6" md="4">
+        <MudTextField @bind-Value="FilterValue" 
+                     Label="Filter Teams" 
+                     Placeholder="Search by team name or code"
+                     Variant="Variant.Outlined" 
+                     Adornment="Adornment.End" 
+                     AdornmentIcon="@Icons.Material.Filled.Search"
+                     Immediate="true"
+                     OnKeyDown="@(async (e) => { if (e.Key == "Enter") await SearchTeamsAsync(); })" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="8" Class="d-flex align-center">
+        <MudButton Variant="Variant.Filled" OnClick="OpenCreateTeamDialog" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Add New Team</MudButton>
+        @if (!string.IsNullOrWhiteSpace(FilterValue))
+        {
+            <MudButton Variant="Variant.Text" OnClick="ClearFilter" Color="Color.Default" StartIcon="@Icons.Material.Filled.Clear" Class="ml-2">Clear Filter</MudButton>
+        }
+    </MudItem>
+</MudGrid>
 
 <MudDataGrid @ref="_dataGrid"
              Items="@Teams"
@@ -75,6 +93,13 @@
 
     private async Task SearchTeamsAsync()
     {
+        Page = 1;
+        await LoadTeamsAsync();
+    }
+
+    private async Task ClearFilter()
+    {
+        FilterValue = string.Empty;
         Page = 1;
         await LoadTeamsAsync();
     }

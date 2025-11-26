@@ -147,15 +147,16 @@ public class TeamService
             }
 
             var offset = (page - 1) * pageSize;
+            var filterParam = string.IsNullOrWhiteSpace(filterValue) ? "%" : $"%{filterValue}%";
             var parameters = new
             {
                 PageSize = pageSize,
                 Offset = offset,
-                FilterValue = $"%{filterValue}%" // Ensure filterValue is handled if null
+                FilterValue = filterParam
             };
 
             var teams = await _sqlService.QueryAsync<TeamModel>(TeamQueries.GetTeamsPaginated, parameters);
-            var totalCount = await _sqlService.QuerySingleAsync<int>(TeamQueries.GetTeamCount, new { FilterValue = $"%{filterValue}%" });
+            var totalCount = await _sqlService.QuerySingleAsync<int>(TeamQueries.GetTeamCount, new { FilterValue = filterParam });
 
             var response = new TeamListResponseModel // Assuming TeamListResponseModel exists
             {

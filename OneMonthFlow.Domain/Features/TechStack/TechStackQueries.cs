@@ -12,13 +12,13 @@ public static class TechStackQueries
 
     public const string GetTechStacksPaginated = @"
         SELECT * FROM Tbl_TechStack
-        WHERE TechStackName LIKE @FilterValue OR TechStackCode LIKE @FilterValue
+        WHERE (@FilterValue = '%' OR TechStackName LIKE @FilterValue OR TechStackCode LIKE @FilterValue)
         ORDER BY TechStackName
         OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;";
 
     public const string GetTechStackCount = @"
         SELECT COUNT(*) FROM Tbl_TechStack
-        WHERE TechStackName LIKE @FilterValue OR TechStackCode LIKE @FilterValue;";
+        WHERE (@FilterValue = '%' OR TechStackName LIKE @FilterValue OR TechStackCode LIKE @FilterValue);";
 
     public const string UpdateTechStack = @"
         UPDATE Tbl_TechStack 

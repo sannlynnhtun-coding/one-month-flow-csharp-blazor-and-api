@@ -17,11 +17,13 @@ public static class UserQueries
     public const string GetUsersPaginated = @"
         SELECT UserId, UserCode, UserName, GitHubAccountName, Nrc, MobileNo
         FROM Tbl_User
+        WHERE (@FilterValue IS NULL OR UserName LIKE @FilterValue OR UserCode LIKE @FilterValue OR GitHubAccountName LIKE @FilterValue)
         ORDER BY UserName
         OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;";
 
     public const string GetUserCount = @"
-        SELECT COUNT(*) FROM Tbl_User;";
+        SELECT COUNT(*) FROM Tbl_User
+        WHERE (@FilterValue IS NULL OR UserName LIKE @FilterValue OR UserCode LIKE @FilterValue OR GitHubAccountName LIKE @FilterValue);";
 
     public const string UpdateUser = @"
         UPDATE Tbl_User

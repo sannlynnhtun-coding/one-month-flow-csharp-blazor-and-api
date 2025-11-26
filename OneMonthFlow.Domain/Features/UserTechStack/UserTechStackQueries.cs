@@ -29,6 +29,7 @@ public static class UserTechStackQueries
         FROM Tbl_UserTechStack uts
         JOIN Tbl_User u ON u.UserCode = uts.UserCode
         JOIN Tbl_TechStack t ON t.TechStackCode = uts.TechStackCode
+        WHERE (@FilterValue IS NULL OR u.UserName LIKE @FilterValue OR u.UserCode LIKE @FilterValue OR t.TechStackName LIKE @FilterValue OR t.TechStackCode LIKE @FilterValue)
         ORDER BY u.UserName
         OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;";
 
@@ -36,7 +37,8 @@ public static class UserTechStackQueries
         SELECT COUNT(*)
         FROM Tbl_UserTechStack uts
         JOIN Tbl_User u ON u.UserCode = uts.UserCode
-        JOIN Tbl_TechStack t ON t.TechStackCode = uts.TechStackCode;";
+        JOIN Tbl_TechStack t ON t.TechStackCode = uts.TechStackCode
+        WHERE (@FilterValue IS NULL OR u.UserName LIKE @FilterValue OR u.UserCode LIKE @FilterValue OR t.TechStackName LIKE @FilterValue OR t.TechStackCode LIKE @FilterValue);";
 
     public const string GetUserTechStackById = @"
     SELECT uts.*, u.UserCode, u.UserName, t.TechStackCode, t.TechStackName
