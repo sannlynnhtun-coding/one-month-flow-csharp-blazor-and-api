@@ -1,4 +1,4 @@
-# OneMonthFlow
+# 🚀 One Month Flow: C# Blazor & Web API
 
 A project management system for tracking projects, teams, users, and their technology stacks.
 
