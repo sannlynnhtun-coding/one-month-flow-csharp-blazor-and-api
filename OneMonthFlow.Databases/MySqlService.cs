@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using System.Data.Common;
 using Dapper;
 using Microsoft.Extensions.Logging;
 
@@ -22,7 +23,7 @@ namespace OneMonthFlow.Databases
                 _logger.LogInformation("Executing SQL: {Sql} | Parameters: {@Parameters}", sql, parameters);
 
                 using var connection = _connectionFactory.CreateConnection();
-                await connection.OpenAsync();
+                await ((DbConnection)connection).OpenAsync();
 
                 var result = await connection.ExecuteAsync(sql, parameters);
 
@@ -44,7 +45,7 @@ namespace OneMonthFlow.Databases
                 _logger.LogInformation("Querying SQL: {Sql} | Parameters: {@Parameters}", sql, parameters);
 
                 using var connection = _connectionFactory.CreateConnection();
-                await connection.OpenAsync();
+                await ((DbConnection)connection).OpenAsync();
 
                 var result = await connection.QueryAsync<T>(sql, parameters);
 
@@ -66,7 +67,7 @@ namespace OneMonthFlow.Databases
                 _logger.LogInformation("Querying single result SQL: {Sql} | Parameters: {@Parameters}", sql, parameters);
 
                 using var connection = _connectionFactory.CreateConnection();
-                await connection.OpenAsync();
+                await ((DbConnection)connection).OpenAsync();
 
                 var result = await connection.QuerySingleAsync<T>(sql, parameters);
 
@@ -88,7 +89,7 @@ namespace OneMonthFlow.Databases
                 _logger.LogInformation("Querying first or default SQL: {Sql} | Parameters: {@Parameters}", sql, parameters);
 
                 using var connection = _connectionFactory.CreateConnection();
-                await connection.OpenAsync();
+                await ((DbConnection)connection).OpenAsync();
 
                 var result = await connection.QueryFirstOrDefaultAsync<T>(sql, parameters);
 

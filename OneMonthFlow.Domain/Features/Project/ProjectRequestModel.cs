@@ -8,5 +8,6 @@ public class ProjectRequestModel
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public string ProjectDescription { get; set; }
+    public string Status { get; set; }
     public List<ProjectTeamRequestModel> Teams { get; set; }
 }

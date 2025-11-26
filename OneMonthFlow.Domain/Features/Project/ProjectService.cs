@@ -50,7 +50,8 @@ public class ProjectService
                 RepoUrl = request.RepoUrl,
                 StartDate = request.StartDate,
                 EndDate = request.EndDate,
-                ProjectDescription = request.ProjectDescription
+                ProjectDescription = request.ProjectDescription,
+                Status = request.Status ?? "Active"
             };
 
             int projectRowsAffected = await _sqlService.ExecuteAsync(ProjectQueries.InsertProject, project);
